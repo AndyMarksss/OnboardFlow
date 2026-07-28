@@ -3,12 +3,12 @@
 **Gestão inteligente de onboarding com integração de APIs**  
 **Versão final:** `0.5.2` · **Status:** concluído
 
-| Informação acadêmica | Dados                             |
-| -------------------- | --------------------------------- |
-| Curso                | Graduação IA e Automação Digital  |
-| Disciplina           | Integração de APIs                |
-| Aluno                | Anderson Barbosa Marques da Silva |
-| RA                   | 16732                             |
+| Informação acadêmica | Dados |
+|---|---|
+| Curso | Graduação IA e Automação Digital |
+| Disciplina | Integração de APIs |
+| Aluno | Anderson Barbosa Marques da Silva |
+| RA | 16732 |
 
 ## Acesso ao projeto
 
@@ -49,18 +49,17 @@ O OnboardFlow transforma esse processo em um fluxo centralizado, rastreável e o
 
 ## APIs e serviços integrados
 
-| Integração         | Finalidade                                                   | Implementação                         |
-| ------------------ | ------------------------------------------------------------ | ------------------------------------- |
-| Airtable REST API  | Armazenar colaboradores, tarefas, configurações e automações | `UrlFetchApp` com autenticação Bearer |
-| Gmail              | Enviar a comunicação de boas-vindas e controlar duplicidades | `GmailApp`                            |
-| Google Calendar    | Criar e acompanhar o evento de integração                    | `CalendarApp`                         |
-| Google Apps Script | Orquestrar regras, segurança, interface e publicação         | JavaScript V8 e HTML Service          |
+| Integração | Finalidade | Implementação |
+|---|---|---|
+| Airtable REST API | Armazenar colaboradores, tarefas, configurações e automações | `UrlFetchApp` com autenticação Bearer |
+| Gmail | Enviar a comunicação de boas-vindas e controlar duplicidades | `GmailApp` |
+| Google Calendar | Criar e acompanhar o evento de integração | `CalendarApp` |
+| Google Apps Script | Orquestrar regras, segurança, interface e publicação | JavaScript V8 e HTML Service |
 
 ## Fluxo de integração
 
 ```mermaid
 flowchart TD
-    flowchart TD
     A[Cadastro do<br/>colaborador]
     B[Google Apps Script]
     C[Validação e<br/>normalização]
@@ -113,19 +112,19 @@ A configuração final possui **25 etapas consolidadas**, formadas por 16 tarefa
 
 ## Resultados validados
 
-| Indicador                       | Resultado |
-| ------------------------------- | --------: |
-| Total de onboardings            |        20 |
-| Pendentes                       |         4 |
-| Em andamento                    |         9 |
-| Concluídos                      |         5 |
-| Cancelados                      |         2 |
-| Progresso médio                 |       49% |
-| Tarefas geradas                 |       340 |
-| Processos ativos                |        18 |
-| Tarefas de processos ativos     |       306 |
-| Processos cancelados            |         2 |
-| Tarefas de processos cancelados |        34 |
+| Indicador | Resultado |
+|---|---:|
+| Total de onboardings | 20 |
+| Pendentes | 4 |
+| Em andamento | 9 |
+| Concluídos | 5 |
+| Cancelados | 2 |
+| Progresso médio | 49% |
+| Tarefas geradas | 340 |
+| Processos ativos | 18 |
+| Tarefas de processos ativos | 306 |
+| Processos cancelados | 2 |
+| Tarefas de processos cancelados | 34 |
 
 ## Demonstração visual
 
@@ -248,12 +247,12 @@ A versão final foi validada quanto a:
 
 ## Histórico resumido
 
-| Versão | Evolução principal                                        |
-| ------ | --------------------------------------------------------- |
-| 0.4.7  | Interface consolidada e base de apresentação              |
-| 0.5.0  | Central de Tarefas e fluxo por macrofases                 |
-| 0.5.1  | Classificação determinística das etapas                   |
-| 0.5.2  | Separação operacional entre processos ativos e cancelados |
+| Versão | Evolução principal |
+|---|---|
+| 0.4.7 | Interface consolidada e base de apresentação |
+| 0.5.0 | Central de Tarefas e fluxo por macrofases |
+| 0.5.1 | Classificação determinística das etapas |
+| 0.5.2 | Separação operacional entre processos ativos e cancelados |
 
 ## Autor
 
