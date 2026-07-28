@@ -1,0 +1,1472 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <base target="_top">
+
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+
+  <meta
+    name="description"
+    content="Central Inteligente de Onboarding de Colaboradores"
+  >
+
+  <title>OnboardFlow</title>
+
+  <!-- Font Awesome: biblioteca visual oficial do projeto -->
+  <link
+    rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"
+    referrerpolicy="no-referrer"
+  >
+
+  <?!= include('Styles'); ?>
+</head>
+
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          OF
+        </div>
+
+        <div>
+          <strong class="brand-name">
+            OnboardFlow
+          </strong>
+
+          <span class="brand-description">
+            Gestão inteligente de onboarding
+          </span>
+        </div>
+      </div>
+
+      <nav
+        class="main-navigation"
+        aria-label="Navegação principal"
+      >
+        <button
+          type="button"
+          class="nav-button is-active"
+          data-view="dashboard"
+          aria-label="Abrir visão geral"
+          title="Visão geral"
+        >
+          <i class="fa-solid fa-chart-pie" aria-hidden="true"></i>
+          <span>Visão geral</span>
+        </button>
+
+        <button
+          type="button"
+          class="nav-button"
+          data-view="new"
+          aria-label="Cadastrar novo onboarding"
+          title="Novo onboarding"
+        >
+          <i class="fa-solid fa-user-plus" aria-hidden="true"></i>
+          <span>Novo onboarding</span>
+        </button>
+
+        <button
+          type="button"
+          class="nav-button"
+          data-view="tasks"
+          aria-label="Abrir Central de Tarefas"
+          title="Tarefas"
+        >
+          <i class="fa-solid fa-list-check" aria-hidden="true"></i>
+          <span>Tarefas</span>
+        </button>
+
+        <button
+          type="button"
+          class="nav-button"
+          data-view="collaborators"
+          aria-label="Abrir lista de colaboradores"
+          title="Colaboradores"
+        >
+          <i class="fa-solid fa-users" aria-hidden="true"></i>
+          <span>Colaboradores</span>
+        </button>
+      </nav>
+
+      <div class="topbar-actions">
+        <span
+          id="connectionStatus"
+          class="connection-status is-loading"
+        >
+          <span class="status-dot"></span>
+          Carregando
+        </span>
+
+        <button
+          id="refreshButton"
+          type="button"
+          class="button button-secondary button-compact"
+          aria-label="Atualizar dados do painel"
+          title="Atualizar dados"
+        >
+          <i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i>
+          <span>Atualizar</span>
+        </button>
+      </div>
+    </header>
+
+    <main class="main-content">
+      <section
+        id="environmentBanner"
+        class="environment-banner"
+        aria-live="polite"
+      >
+        <div class="environment-icon" aria-hidden="true">
+          <i class="fa-solid fa-info"></i>
+        </div>
+
+        <div>
+          <strong>Ambiente acadêmico de demonstração</strong>
+
+          <p id="environmentMessage">
+            Notificações e eventos utilizam o ambiente de teste configurado.
+          </p>
+        </div>
+      </section>
+
+      <!-- DASHBOARD -->
+      <section
+        id="view-dashboard"
+        class="view-section is-active"
+        aria-labelledby="dashboardTitle"
+      >
+        <div class="page-heading">
+          <div>
+            <span class="eyebrow">
+              Painel operacional
+            </span>
+
+            <h1 id="dashboardTitle">
+              Visão geral
+            </h1>
+
+            <p>
+              Acompanhe os processos de integração,
+              tarefas e automações executadas.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            class="button button-primary"
+            data-go-view="new"
+          >
+            <i class="fa-solid fa-user-plus" aria-hidden="true"></i>
+            <span>Novo onboarding</span>
+          </button>
+        </div>
+
+
+        <section class="dashboard-toolbar" aria-label="Filtros da visão geral">
+          <div class="filter-group">
+            <label for="dashboardDepartmentFilter">Departamento</label>
+            <select id="dashboardDepartmentFilter">
+              <option value="">Todos os departamentos</option>
+            </select>
+          </div>
+
+          <div class="filter-group">
+            <label for="dashboardStatusFilter">Status</label>
+            <select id="dashboardStatusFilter">
+              <option value="">Todos os status</option>
+            </select>
+          </div>
+
+          <button
+            id="clearDashboardFilters"
+            type="button"
+            class="button button-secondary button-compact"
+          >
+            <i class="fa-solid fa-filter-circle-xmark" aria-hidden="true"></i>
+            <span>Limpar filtros</span>
+          </button>
+
+          <span id="dashboardFilterSummary" class="filter-summary">
+            Exibindo todos os processos
+          </span>
+        </section>
+
+        <div class="metrics-grid metrics-grid-status" aria-label="Indicadores do recorte atual">
+          <button
+            type="button"
+            class="metric-card metric-card-total is-filter-card"
+            data-dashboard-status=""
+            aria-label="Exibir todos os status do recorte"
+          >
+            <span class="metric-card-topline">
+              <span class="metric-label">Total de onboardings</span>
+              <span class="metric-icon" aria-hidden="true"><i class="fa-solid fa-layer-group"></i></span>
+            </span>
+            <strong id="metricTotal" class="metric-value">0</strong>
+            <span class="metric-detail">Processos no recorte atual</span>
+            <span class="metric-action-hint">Todos os status</span>
+          </button>
+
+          <button
+            type="button"
+            class="metric-card metric-card-pending is-filter-card"
+            data-dashboard-status="Pendente"
+            aria-label="Filtrar onboardings pendentes"
+          >
+            <span class="metric-card-topline">
+              <span class="metric-label">Pendentes</span>
+              <span class="metric-icon" aria-hidden="true"><i class="fa-regular fa-clock"></i></span>
+            </span>
+            <strong id="metricPending" class="metric-value">0</strong>
+            <span class="metric-detail">Ainda não iniciados</span>
+            <span class="metric-action-hint">Filtrar pendentes</span>
+          </button>
+
+          <button
+            type="button"
+            class="metric-card metric-card-progress is-filter-card"
+            data-dashboard-status="Em andamento"
+            aria-label="Filtrar onboardings em andamento"
+          >
+            <span class="metric-card-topline">
+              <span class="metric-label">Em andamento</span>
+              <span class="metric-icon" aria-hidden="true"><i class="fa-solid fa-circle-play"></i></span>
+            </span>
+            <strong id="metricInProgress" class="metric-value">0</strong>
+            <span class="metric-detail">Processos ativos</span>
+            <span class="metric-action-hint">Filtrar ativos</span>
+          </button>
+
+          <button
+            type="button"
+            class="metric-card metric-card-completed is-filter-card"
+            data-dashboard-status="Concluído"
+            aria-label="Filtrar onboardings concluídos"
+          >
+            <span class="metric-card-topline">
+              <span class="metric-label">Concluídos</span>
+              <span class="metric-icon" aria-hidden="true"><i class="fa-solid fa-circle-check"></i></span>
+            </span>
+            <strong id="metricCompleted" class="metric-value">0</strong>
+            <span class="metric-detail">Processos finalizados</span>
+            <span class="metric-action-hint">Filtrar concluídos</span>
+          </button>
+
+          <button
+            type="button"
+            class="metric-card metric-card-cancelled is-filter-card"
+            data-dashboard-status="Cancelado"
+            aria-label="Filtrar onboardings cancelados"
+          >
+            <span class="metric-card-topline">
+              <span class="metric-label">Cancelados</span>
+              <span class="metric-icon" aria-hidden="true"><i class="fa-solid fa-ban"></i></span>
+            </span>
+            <strong id="metricCancelled" class="metric-value">0</strong>
+            <span class="metric-detail">Processos interrompidos</span>
+            <span class="metric-action-hint">Filtrar cancelados</span>
+          </button>
+
+          <article class="metric-card metric-card-average">
+            <span class="metric-card-topline">
+              <span class="metric-label">Progresso médio</span>
+              <span class="metric-icon" aria-hidden="true"><i class="fa-solid fa-chart-line"></i></span>
+            </span>
+            <strong id="metricAverageProgress" class="metric-value">0%</strong>
+            <span class="metric-detail">Média dos processos filtrados</span>
+            <span class="metric-action-hint is-static">Indicador do recorte</span>
+          </article>
+        </div>
+
+        <section id="dashboardInsight" class="dashboard-insight" aria-live="polite">
+          <span id="dashboardInsightIcon" class="dashboard-insight-icon" aria-hidden="true"><i class="fa-solid fa-circle-check"></i></span>
+          <div class="dashboard-insight-content">
+            <strong id="dashboardInsightTitle">Operação sob controle</strong>
+            <p id="dashboardInsightText">Os indicadores do onboarding serão apresentados após o carregamento.</p>
+          </div>
+          <button
+            id="dashboardInsightAction"
+            type="button"
+            class="button button-secondary button-compact"
+            hidden
+          >
+            Ver processos
+          </button>
+        </section>
+
+        <section class="operational-overview" aria-label="Resumo operacional">
+          <article class="status-overview-card">
+            <div class="overview-heading">
+              <div>
+                <span class="eyebrow"><i class="fa-solid fa-chart-simple" aria-hidden="true"></i> Distribuição</span>
+                <h2>Status dos processos</h2>
+              </div>
+              <span id="statusDistributionTotal" class="overview-total">0 processos</span>
+            </div>
+
+            <div id="statusDistributionBar" class="status-distribution-bar" aria-hidden="true"></div>
+            <div id="statusDistributionLegend" class="status-distribution-legend"></div>
+          </article>
+
+          <article class="integration-overview-card">
+            <div class="overview-heading">
+              <div>
+                <span class="eyebrow"><i class="fa-solid fa-bolt" aria-hidden="true"></i> Integrações</span>
+                <h2>Execução automatizada</h2>
+              </div>
+            </div>
+
+            <div class="integration-stat-grid">
+              <div class="integration-stat">
+                <span>Tarefas geradas</span>
+                <strong id="metricTasks">0</strong>
+                <small id="metricTasksDetail">0 tarefa por processo</small>
+              </div>
+              <div class="integration-stat">
+                <span>Eventos criados</span>
+                <strong id="metricEvents">0</strong>
+                <small id="metricEventsDetail">0% de cobertura</small>
+                <div class="integration-mini-track" aria-hidden="true">
+                  <i id="metricEventsBar"></i>
+                </div>
+              </div>
+              <div class="integration-stat">
+                <span>E-mails enviados</span>
+                <strong id="metricEmails">0</strong>
+                <small id="metricEmailsDetail">0% de cobertura</small>
+                <div class="integration-mini-track" aria-hidden="true">
+                  <i id="metricEmailsBar"></i>
+                </div>
+              </div>
+              <div class="integration-stat integration-stat-danger">
+                <span>Tarefas atrasadas</span>
+                <strong id="metricOverdueTasks">0</strong>
+                <small id="metricOverdueDetail">Nenhum prazo vencido</small>
+              </div>
+            </div>
+          </article>
+        </section>
+
+        <article class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Onboardings recentes</h2>
+
+              <p id="dashboardResultCount">
+                Últimos colaboradores cadastrados na plataforma.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              class="text-button"
+              data-go-view="collaborators"
+            >
+              <span>Ver todos</span>
+              <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+            </button>
+          </div>
+
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Colaborador</th>
+                  <th>Departamento</th>
+                  <th>Admissão</th>
+                  <th>Status</th>
+                  <th>Progresso</th>
+                  <th>Tarefas</th>
+                  <th>Agenda</th>
+                  <th>E-mail</th>
+                  <th class="table-action-heading"><span class="sr-only">Ação</span></th>
+                </tr>
+              </thead>
+
+              <tbody id="recentCollaboratorsBody">
+                <tr>
+                  <td colspan="9" class="empty-cell">
+                    Carregando dados...
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+
+      <!-- NOVO ONBOARDING -->
+      <section
+        id="view-new"
+        class="view-section"
+        aria-labelledby="newOnboardingTitle"
+      >
+        <div class="page-heading">
+          <div>
+            <span class="eyebrow">
+              Novo processo
+            </span>
+
+            <h1 id="newOnboardingTitle">
+              Cadastrar colaborador
+            </h1>
+
+            <p>
+              O cadastro criará automaticamente o colaborador,
+              as tarefas, o evento e o e-mail de boas-vindas.
+            </p>
+          </div>
+
+        </div>
+
+        <form
+          id="onboardingForm"
+          class="onboarding-form"
+          novalidate
+        >
+          <article class="form-card">
+            <div class="form-card-header">
+              <span class="form-step">1</span>
+
+              <div>
+                <h2><i class="fa-solid fa-id-card" aria-hidden="true"></i> Dados do colaborador</h2>
+
+                <p>
+                  Informações principais do novo integrante.
+                </p>
+              </div>
+            </div>
+
+            <div class="form-grid">
+              <div class="form-field form-field-wide">
+                <label for="name">
+                  Nome completo
+                  <span aria-hidden="true">*</span>
+                </label>
+
+                <input
+                  id="name"
+                  name="nome"
+                  type="text"
+                  autocomplete="name"
+                  maxlength="120"
+                  required
+                >
+              </div>
+
+              <div class="form-field">
+                <label for="email">
+                  E-mail do colaborador
+                  <span aria-hidden="true">*</span>
+                </label>
+
+                <input
+                  id="email"
+                  name="email"
+                  type="email"
+                  autocomplete="email"
+                  maxlength="150"
+                  required
+                >
+
+                <small>
+                  No ambiente de demonstração, a mensagem será
+                  redirecionada para o e-mail de teste.
+                </small>
+              </div>
+
+              <div class="form-field">
+                <label for="position">
+                  Cargo
+                  <span aria-hidden="true">*</span>
+                </label>
+
+                <input
+                  id="position"
+                  name="cargo"
+                  type="text"
+                  maxlength="100"
+                  required
+                >
+              </div>
+
+              <div class="form-field">
+                <label for="department">
+                  Departamento
+                  <span aria-hidden="true">*</span>
+                </label>
+
+                <select
+                  id="department"
+                  name="departamento"
+                  required
+                >
+                  <option value="">
+                    Selecione
+                  </option>
+                  <option>Pedagógico</option>
+                  <option>Administrativo</option>
+                  <option>Recursos Humanos</option>
+                  <option>Tecnologia da Informação</option>
+                  <option>Financeiro</option>
+                  <option>Marketing</option>
+                  <option>Secretaria</option>
+                  <option>Manutenção</option>
+                  <option>Portaria</option>
+                  <option>Outro</option>
+                </select>
+              </div>
+
+              <div class="form-field">
+                <label for="admissionDate">
+                  Data de admissão
+                  <span aria-hidden="true">*</span>
+                </label>
+
+                <input
+                  id="admissionDate"
+                  name="dataAdmissao"
+                  type="date"
+                  required
+                >
+              </div>
+
+              <div class="form-field">
+                <label for="workMode">
+                  Modalidade
+                  <span aria-hidden="true">*</span>
+                </label>
+
+                <select
+                  id="workMode"
+                  name="modalidade"
+                  required
+                >
+                  <option value="">
+                    Selecione
+                  </option>
+                  <option>Presencial</option>
+                  <option>Híbrido</option>
+                  <option>Remoto</option>
+                </select>
+              </div>
+
+              <div class="form-field">
+                <label for="contractType">
+                  Tipo de vínculo
+                  <span aria-hidden="true">*</span>
+                </label>
+
+                <select
+                  id="contractType"
+                  name="tipoVinculo"
+                  required
+                >
+                  <option value="">
+                    Selecione
+                  </option>
+                  <option>CLT</option>
+                  <option>PJ</option>
+                  <option>Estágio</option>
+                  <option>Temporário</option>
+                  <option>Terceirizado</option>
+                  <option>Outro</option>
+                </select>
+              </div>
+            </div>
+          </article>
+
+          <article class="form-card">
+            <div class="form-card-header">
+              <span class="form-step">2</span>
+
+              <div>
+                <h2><i class="fa-solid fa-user-tie" aria-hidden="true"></i> Liderança responsável</h2>
+
+                <p>
+                  Responsável pelo acompanhamento inicial.
+                </p>
+              </div>
+            </div>
+
+            <div class="form-grid">
+              <div class="form-field">
+                <label for="leaderName">
+                  Nome do líder
+                  <span aria-hidden="true">*</span>
+                </label>
+
+                <input
+                  id="leaderName"
+                  name="liderResponsavel"
+                  type="text"
+                  maxlength="120"
+                  required
+                >
+              </div>
+
+              <div class="form-field">
+                <label for="leaderEmail">
+                  E-mail do líder
+                  <span aria-hidden="true">*</span>
+                </label>
+
+                <input
+                  id="leaderEmail"
+                  name="emailLider"
+                  type="email"
+                  maxlength="150"
+                  required
+                >
+              </div>
+
+              <div class="form-field form-field-wide">
+                <label for="notes">
+                  Observações
+                </label>
+
+                <textarea
+                  id="notes"
+                  name="observacoes"
+                  rows="4"
+                  maxlength="1000"
+                  placeholder="Inclua orientações ou informações adicionais."
+                ></textarea>
+              </div>
+            </div>
+          </article>
+
+          <article class="automation-preview">
+            <div>
+              <span class="eyebrow">
+                Fluxo automático
+              </span>
+
+              <h2>O que acontecerá após o cadastro?</h2>
+            </div>
+
+            <div class="automation-steps">
+              <div class="automation-step">
+                <span>1</span>
+                <strong><i class="fa-solid fa-address-card" aria-hidden="true"></i> Cadastro</strong>
+                <small>Registro no Airtable</small>
+              </div>
+
+              <div class="automation-step">
+                <span>2</span>
+                <strong><i class="fa-solid fa-list-check" aria-hidden="true"></i> Checklist</strong>
+                <small>Tarefas por departamento</small>
+              </div>
+
+              <div class="automation-step">
+                <span>3</span>
+                <strong><i class="fa-solid fa-calendar-check" aria-hidden="true"></i> Agenda</strong>
+                <small>Evento de integração</small>
+              </div>
+
+              <div class="automation-step">
+                <span>4</span>
+                <strong><i class="fa-solid fa-envelope-open-text" aria-hidden="true"></i> Comunicação</strong>
+                <small>E-mail de boas-vindas</small>
+              </div>
+            </div>
+          </article>
+
+          <div class="form-actions">
+            <button
+              id="cancelOnboardingFormButton"
+              type="button"
+              class="button button-secondary"
+            >
+              <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
+              <span>Cancelar cadastro</span>
+            </button>
+
+            <button
+              id="submitOnboardingButton"
+              type="submit"
+              class="button button-primary button-large"
+            >
+              <i class="fa-solid fa-rocket" aria-hidden="true"></i>
+              <span>Criar onboarding</span>
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <!-- CENTRAL DE TAREFAS -->
+      <section
+        id="view-tasks"
+        class="view-section"
+        aria-labelledby="taskCenterTitle"
+      >
+        <div class="page-heading">
+          <div>
+            <span class="eyebrow">
+              Gestão operacional
+            </span>
+
+            <h1 id="taskCenterTitle">
+              Central de tarefas
+            </h1>
+
+            <p>
+              Acompanhe o fluxo do onboarding, as etapas em execução
+              e os colaboradores envolvidos.
+            </p>
+          </div>
+
+          <button
+            id="refreshTaskCenterButton"
+            type="button"
+            class="button button-primary"
+          >
+            <i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i>
+            <span>Atualizar tarefas</span>
+          </button>
+        </div>
+
+        <div
+          id="taskCenterMetrics"
+          class="metrics-grid task-center-metrics"
+          aria-label="Indicadores da Central de Tarefas"
+        >
+          <article class="metric-card task-metric-total">
+            <span class="metric-card-topline">
+              <span class="metric-label">Total de tarefas</span>
+              <span class="metric-icon" aria-hidden="true"><i class="fa-solid fa-list-check"></i></span>
+            </span>
+            <strong id="taskMetricTotal" class="metric-value">0</strong>
+            <span id="taskMetricTotalDetail" class="metric-detail">0 etapas consolidadas</span>
+          </article>
+
+          <article class="metric-card task-metric-pending">
+            <span class="metric-card-topline">
+              <span class="metric-label">Pendentes</span>
+              <span class="metric-icon" aria-hidden="true"><i class="fa-regular fa-clock"></i></span>
+            </span>
+            <strong id="taskMetricPending" class="metric-value">0</strong>
+            <span class="metric-detail">Aguardando execução</span>
+          </article>
+
+          <article class="metric-card task-metric-progress">
+            <span class="metric-card-topline">
+              <span class="metric-label">Em andamento</span>
+              <span class="metric-icon" aria-hidden="true"><i class="fa-solid fa-circle-play"></i></span>
+            </span>
+            <strong id="taskMetricInProgress" class="metric-value">0</strong>
+            <span class="metric-detail">Etapas em execução</span>
+          </article>
+
+          <article class="metric-card task-metric-completed">
+            <span class="metric-card-topline">
+              <span class="metric-label">Concluídas</span>
+              <span class="metric-icon" aria-hidden="true"><i class="fa-solid fa-circle-check"></i></span>
+            </span>
+            <strong id="taskMetricCompleted" class="metric-value">0</strong>
+            <span class="metric-detail">Execuções finalizadas</span>
+          </article>
+
+          <article class="metric-card task-metric-overdue">
+            <span class="metric-card-topline">
+              <span class="metric-label">Atrasadas</span>
+              <span class="metric-icon" aria-hidden="true"><i class="fa-solid fa-triangle-exclamation"></i></span>
+            </span>
+            <strong id="taskMetricOverdue" class="metric-value">0</strong>
+            <span class="metric-detail">Prazos que exigem atenção</span>
+          </article>
+
+          <article class="metric-card task-metric-people">
+            <span class="metric-card-topline">
+              <span class="metric-label">Colaboradores envolvidos</span>
+              <span class="metric-icon" aria-hidden="true"><i class="fa-solid fa-users"></i></span>
+            </span>
+            <strong id="taskMetricCollaborators" class="metric-value">0</strong>
+            <span class="metric-detail">Pessoas no recorte atual</span>
+          </article>
+        </div>
+
+        <article class="panel task-flow-panel">
+          <div class="panel-header">
+            <div>
+              <span class="eyebrow">Passo a passo</span>
+              <h2>Fluxo do onboarding</h2>
+              <p>
+                Visão das principais fases percorridas desde o cadastro
+                até a conclusão do processo.
+              </p>
+            </div>
+
+            <span id="taskFlowSummary" class="filter-summary">
+              Carregando fases...
+            </span>
+          </div>
+
+          <div id="taskFlowContainer" class="task-flow-container">
+            <div class="task-center-placeholder">
+              <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+              <span>Carregando fluxo do onboarding...</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="panel task-center-list-panel">
+          <div class="panel-header task-center-list-header">
+            <div>
+              <span class="eyebrow">Checklist consolidado</span>
+              <h2>Etapas e colaboradores</h2>
+              <p id="taskCenterResultSummary">
+                Carregando tarefas cadastradas...
+              </p>
+            </div>
+
+            <button
+              id="clearTaskCenterFilters"
+              type="button"
+              class="button button-secondary button-compact"
+            >
+              <i class="fa-solid fa-filter-circle-xmark" aria-hidden="true"></i>
+              <span>Limpar filtros</span>
+            </button>
+          </div>
+
+          <div class="task-center-filter-bar" aria-label="Filtros da Central de Tarefas">
+            <div class="search-field task-center-search">
+              <label for="taskCenterSearch">Pesquisar</label>
+              <div class="search-input-shell">
+                <span class="search-input-icon" aria-hidden="true"><i class="fa-solid fa-magnifying-glass"></i></span>
+                <input
+                  id="taskCenterSearch"
+                  type="search"
+                  placeholder="Tarefa, categoria, área ou colaborador"
+                  autocomplete="off"
+                >
+              </div>
+            </div>
+
+            <div class="filter-group">
+              <label for="taskCenterProcessFilter">Processo</label>
+              <select id="taskCenterProcessFilter">
+                <option value="active" selected>Ativos</option>
+                <option value="cancelled">Cancelados</option>
+                <option value="all">Todos</option>
+              </select>
+            </div>
+
+            <div class="filter-group">
+              <label for="taskCenterStatusFilter">Status da tarefa</label>
+              <select id="taskCenterStatusFilter">
+                <option value="">Todos</option>
+                <option value="Pendente">Pendente</option>
+                <option value="Em andamento">Em andamento</option>
+                <option value="Concluída">Concluída</option>
+                <option value="Onboarding cancelado">Onboarding cancelado</option>
+                <option value="Atrasada">Atrasada</option>
+              </select>
+            </div>
+
+            <div class="filter-group">
+              <label for="taskCenterAreaFilter">Área responsável</label>
+              <select id="taskCenterAreaFilter">
+                <option value="">Todas as áreas</option>
+              </select>
+            </div>
+
+            <div class="filter-group">
+              <label for="taskCenterDepartmentFilter">Departamento</label>
+              <select id="taskCenterDepartmentFilter">
+                <option value="">Todos os departamentos</option>
+              </select>
+            </div>
+
+            <div class="filter-group">
+              <label for="taskCenterPhaseFilter">Fase</label>
+              <select id="taskCenterPhaseFilter">
+                <option value="">Todas as fases</option>
+              </select>
+            </div>
+
+            <div class="filter-group">
+              <label for="taskCenterSort">Ordenar por</label>
+              <select id="taskCenterSort">
+                <option value="flow">Ordem do fluxo</option>
+                <option value="people">Mais colaboradores</option>
+                <option value="pending">Mais pendentes</option>
+                <option value="overdue">Mais atrasos</option>
+                <option value="alphabetical">Ordem alfabética</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="taskCenterGroups" class="task-center-groups">
+            <div class="task-center-placeholder">
+              <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+              <span>Consultando tarefas e colaboradores...</span>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <!-- COLABORADORES -->
+      <section
+        id="view-collaborators"
+        class="view-section"
+        aria-labelledby="collaboratorsTitle"
+      >
+        <div class="page-heading">
+          <div>
+            <span class="eyebrow">
+              Acompanhamento
+            </span>
+
+            <h1 id="collaboratorsTitle">
+              Colaboradores
+            </h1>
+
+            <p>
+              Consulte os processos cadastrados e
+              o status das integrações.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            class="button button-primary"
+            data-go-view="new"
+          >
+            <i class="fa-solid fa-user-plus" aria-hidden="true"></i>
+            <span>Novo onboarding</span>
+          </button>
+        </div>
+
+        <article class="panel">
+
+          <div class="panel-header collaborators-panel-header">
+            <div>
+              <h2>Processos cadastrados</h2>
+              <p id="collaboratorCount">0 colaboradores</p>
+            </div>
+
+            <div class="panel-header-actions">
+              <button
+                id="exportCollaboratorsButton"
+                type="button"
+                class="button button-secondary button-compact"
+              >
+                <i class="fa-solid fa-file-csv" aria-hidden="true"></i>
+                <span>Exportar CSV</span>
+              </button>
+
+              <button
+                id="clearCollaboratorFilters"
+                type="button"
+                class="button button-secondary button-compact"
+              >
+                <i class="fa-solid fa-filter-circle-xmark" aria-hidden="true"></i>
+                <span>Limpar filtros</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="collaborator-filter-bar" aria-label="Filtros de colaboradores">
+            <div class="search-field filter-field-wide">
+              <label for="collaboratorSearch">Pesquisar</label>
+              <div class="search-input-shell">
+                <span class="search-input-icon" aria-hidden="true"><i class="fa-solid fa-magnifying-glass"></i></span>
+                <input
+                  id="collaboratorSearch"
+                  type="search"
+                  placeholder="Nome, cargo ou departamento"
+                  autocomplete="off"
+                >
+              </div>
+            </div>
+
+            <div class="filter-group">
+              <label for="collaboratorDepartmentFilter">Departamento</label>
+              <select id="collaboratorDepartmentFilter">
+                <option value="">Todos</option>
+              </select>
+            </div>
+
+            <div class="filter-group">
+              <label for="collaboratorStatusFilter">Status</label>
+              <select id="collaboratorStatusFilter">
+                <option value="">Todos</option>
+              </select>
+            </div>
+
+            <div class="filter-group">
+              <label for="collaboratorSort">Ordenar por</label>
+              <select id="collaboratorSort">
+                <option value="recent">Mais recentes</option>
+                <option value="name">Nome A–Z</option>
+                <option value="admission">Admissão mais próxima</option>
+                <option value="progress-desc">Maior progresso</option>
+                <option value="progress-asc">Menor progresso</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Colaborador</th>
+                  <th>Departamento</th>
+                  <th>Admissão</th>
+                  <th>Status</th>
+                  <th>Progresso</th>
+                  <th>Tarefas</th>
+                  <th>Agenda</th>
+                  <th>E-mail</th>
+                  <th class="table-action-heading"><span class="sr-only">Ação</span></th>
+                </tr>
+              </thead>
+
+              <tbody id="allCollaboratorsBody">
+                <tr>
+                  <td colspan="9" class="empty-cell">
+                    Carregando dados...
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <footer class="app-footer">
+      <span>
+        OnboardFlow — Projeto acadêmico de Integração de APIs
+      </span>
+
+      <span>
+        Versão 0.5.2
+      </span>
+    </footer>
+  </div>
+
+  
+  <!-- MODAL DE DETALHE DA TAREFA - v0.5.2 -->
+  <div
+    id="taskStageModal"
+    class="task-stage-modal-backdrop"
+    hidden
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="taskStageModalTitle"
+    aria-describedby="taskStageModalSubtitle"
+    aria-hidden="true"
+  >
+    <section class="task-stage-modal-card" tabindex="-1">
+      <header class="task-stage-modal-header">
+        <div>
+          <span id="taskStagePhaseBadge" class="task-phase-badge">
+            Fase do onboarding
+          </span>
+          <h2 id="taskStageModalTitle">Detalhes da tarefa</h2>
+          <p id="taskStageModalSubtitle">Área responsável e categoria</p>
+        </div>
+
+        <button
+          id="closeTaskStageModal"
+          type="button"
+          class="details-modal-close"
+          aria-label="Fechar detalhes da tarefa"
+          title="Fechar detalhes da tarefa"
+        >
+          <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+        </button>
+      </header>
+
+      <div class="task-stage-modal-body">
+        <div id="taskStageSummary" class="task-stage-summary"></div>
+
+        <div class="task-stage-filter-bar" aria-label="Filtros dos colaboradores da tarefa">
+          <div class="search-field task-stage-search">
+            <label for="taskStageSearch">Pesquisar colaborador</label>
+            <div class="search-input-shell">
+              <span class="search-input-icon" aria-hidden="true"><i class="fa-solid fa-magnifying-glass"></i></span>
+              <input
+                id="taskStageSearch"
+                type="search"
+                placeholder="Nome, cargo ou departamento"
+                autocomplete="off"
+              >
+            </div>
+          </div>
+
+          <div class="filter-group">
+            <label for="taskStageProcessFilter">Processo</label>
+            <select id="taskStageProcessFilter">
+              <option value="active">Ativos</option>
+              <option value="cancelled">Cancelados</option>
+              <option value="all">Todos</option>
+            </select>
+          </div>
+
+          <div class="filter-group">
+            <label for="taskStageStatusFilter">Status da tarefa</label>
+            <select id="taskStageStatusFilter">
+              <option value="">Todos</option>
+              <option value="Pendente">Pendente</option>
+              <option value="Em andamento">Em andamento</option>
+              <option value="Concluída">Concluída</option>
+              <option value="Onboarding cancelado">Onboarding cancelado</option>
+              <option value="Atrasada">Atrasada</option>
+            </select>
+          </div>
+
+          <div class="filter-group">
+            <label for="taskStageDepartmentFilter">Departamento</label>
+            <select id="taskStageDepartmentFilter">
+              <option value="">Todos</option>
+            </select>
+          </div>
+
+          <div class="filter-group">
+            <label for="taskStageSort">Ordenar por</label>
+            <select id="taskStageSort">
+              <option value="status">Status operacional</option>
+              <option value="name">Nome A–Z</option>
+              <option value="deadline">Prazo mais próximo</option>
+              <option value="progress">Maior progresso geral</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="task-stage-list-heading">
+          <div>
+            <h3>Colaboradores nesta etapa</h3>
+            <p id="taskStageCount">0 colaboradores</p>
+          </div>
+          <button
+            id="clearTaskStageFilters"
+            type="button"
+            class="button button-secondary button-compact"
+          >
+            <i class="fa-solid fa-filter-circle-xmark" aria-hidden="true"></i>
+            <span>Limpar filtros</span>
+          </button>
+        </div>
+
+        <div id="taskStageCollaborators" class="task-stage-collaborators"></div>
+      </div>
+
+      <footer class="task-stage-modal-footer">
+        <span>Versão 0.5.2 — Central de Tarefas e Fluxo de Onboarding</span>
+        <button
+          id="closeTaskStageModalFooter"
+          type="button"
+          class="button button-secondary"
+        >
+          <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+          <span>Fechar</span>
+        </button>
+      </footer>
+    </section>
+  </div>
+
+  <!-- MODAL DE GESTÃO DO ONBOARDING - v0.5.2 -->
+  <div
+    id="onboardingDetailsModal"
+    class="details-modal-backdrop"
+    hidden
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="detailsCollaboratorName"
+    aria-describedby="detailsCollaboratorSubtitle"
+    aria-hidden="true"
+  >
+    <section class="details-modal-card is-loading" tabindex="-1" aria-busy="true">
+      <header class="details-modal-header">
+        <div class="details-modal-heading">
+          <span
+            id="detailsStatusBadge"
+            class="status-badge status-pendente"
+          >
+            Carregando
+          </span>
+
+          <h2 id="detailsCollaboratorName">
+            Detalhes do onboarding
+          </h2>
+
+          <p id="detailsCollaboratorSubtitle">
+            Aguarde enquanto consultamos o Airtable.
+          </p>
+        </div>
+
+        <button
+          id="closeDetailsModal"
+          type="button"
+          class="details-modal-close"
+          aria-label="Fechar detalhes"
+          title="Fechar detalhes"
+        >
+          <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+        </button>
+      </header>
+
+      <div
+        id="detailsModalLoading"
+        class="details-modal-loading"
+        role="status"
+        aria-live="polite"
+      >
+        <div class="spinner" aria-hidden="true"><i class="fa-solid fa-spinner fa-spin"></i></div>
+
+        <strong>Carregando detalhes</strong>
+
+        <p>
+          Consultando colaborador, tarefas e histórico.
+        </p>
+      </div>
+
+      <div id="detailsModalContent" hidden aria-busy="false">
+        <nav
+          class="details-tabs"
+          role="tablist"
+          aria-label="Seções dos detalhes"
+        >
+          <button
+            type="button"
+            id="details-tab-button-summary"
+            class="details-tab-button is-active"
+            data-details-tab="summary"
+            role="tab"
+            aria-controls="details-tab-summary"
+            aria-selected="true"
+            tabindex="0"
+          >
+            <i class="fa-solid fa-gauge-high" aria-hidden="true"></i>
+            <span>Resumo</span>
+          </button>
+
+          <button
+            type="button"
+            id="details-tab-button-tasks"
+            class="details-tab-button"
+            data-details-tab="tasks"
+            role="tab"
+            aria-controls="details-tab-tasks"
+            aria-selected="false"
+            tabindex="-1"
+          >
+            <i class="fa-solid fa-list-check" aria-hidden="true"></i>
+            <span>Tarefas</span>
+          </button>
+
+          <button
+            type="button"
+            id="details-tab-button-history"
+            class="details-tab-button"
+            data-details-tab="history"
+            role="tab"
+            aria-controls="details-tab-history"
+            aria-selected="false"
+            tabindex="-1"
+          >
+            <i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i>
+            <span>Histórico</span>
+          </button>
+        </nav>
+
+        <div
+          id="details-tab-summary"
+          class="details-tab-panel is-active"
+          role="tabpanel"
+          aria-labelledby="details-tab-button-summary"
+          aria-hidden="false"
+          tabindex="0"
+        >
+          <div id="detailsSummaryContent"></div>
+        </div>
+
+        <div
+          id="details-tab-tasks"
+          class="details-tab-panel"
+          role="tabpanel"
+          aria-labelledby="details-tab-button-tasks"
+          aria-hidden="true"
+          tabindex="0"
+        >
+          <div id="detailsTasksContent"></div>
+        </div>
+
+        <div
+          id="details-tab-history"
+          class="details-tab-panel"
+          role="tabpanel"
+          aria-labelledby="details-tab-button-history"
+          aria-hidden="true"
+          tabindex="0"
+        >
+          <div id="detailsHistoryContent"></div>
+        </div>
+      </div>
+
+      <footer class="details-modal-footer">
+        <span>
+          Versão 0.5.2 — Central de Tarefas e Fluxo de Onboarding
+        </span>
+
+        <div class="details-modal-footer-actions">
+          <button
+            id="returnToTaskStageButton"
+            type="button"
+            class="button button-secondary"
+            hidden
+          >
+            <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
+            <span>Voltar para a tarefa</span>
+          </button>
+
+          <button
+            id="closeDetailsModalFooter"
+            type="button"
+            class="button button-secondary"
+            title="Fechar detalhes"
+          >
+            <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+            <span>Fechar</span>
+          </button>
+        </div>
+      </footer>
+    </section>
+  </div>
+<div
+    id="loadingOverlay"
+    class="loading-overlay"
+    hidden
+    aria-live="assertive"
+    aria-busy="true"
+    aria-hidden="true"
+  >
+    <div class="loading-card" role="status">
+      <div class="spinner" aria-hidden="true"><i class="fa-solid fa-spinner fa-spin"></i></div>
+
+      <strong id="loadingTitle">
+        Processando
+      </strong>
+
+      <p id="loadingMessage">
+        Aguarde enquanto concluímos a operação.
+      </p>
+    </div>
+  </div>
+
+  <div
+    id="resultModal"
+    class="modal-backdrop"
+    hidden
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="resultModalTitle"
+    aria-hidden="true"
+  >
+    <div class="modal-card" tabindex="-1">
+      <button
+        id="closeResultModal"
+        type="button"
+        class="modal-close"
+        aria-label="Fechar"
+      >
+        <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+      </button>
+
+      <div class="success-icon" aria-hidden="true">
+        <i class="fa-solid fa-check"></i>
+      </div>
+
+      <h2 id="resultModalTitle">
+        Onboarding criado
+      </h2>
+
+      <p id="resultModalMessage">
+        O processo foi concluído.
+      </p>
+
+      <div
+        id="resultModalDetails"
+        class="result-details"
+      ></div>
+
+      <button
+        id="resultModalConfirm"
+        type="button"
+        class="button button-primary button-full"
+      >
+        <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
+        <span>Voltar à visão geral</span>
+      </button>
+    </div>
+  </div>
+
+
+  <div
+    id="confirmationModal"
+    class="modal-backdrop"
+    hidden
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="confirmationModalTitle"
+    aria-hidden="true"
+  >
+    <div class="modal-card confirmation-modal-card" tabindex="-1">
+      <button
+        id="closeConfirmationModal"
+        type="button"
+        class="modal-close"
+        aria-label="Fechar confirmação"
+      >
+        <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+      </button>
+
+      <div id="confirmationModalIcon" class="confirmation-icon" aria-hidden="true"><i class="fa-solid fa-triangle-exclamation"></i></div>
+
+      <h2 id="confirmationModalTitle">Confirmar ação</h2>
+      <p id="confirmationModalMessage">Revise a ação antes de continuar.</p>
+
+      <div class="confirmation-actions">
+        <button
+          id="confirmationCancelButton"
+          type="button"
+          class="button button-secondary"
+        >
+          <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
+          <span>Voltar</span>
+        </button>
+
+        <button
+          id="confirmationConfirmButton"
+          type="button"
+          class="button button-danger"
+        >
+          <i class="fa-solid fa-check" aria-hidden="true"></i>
+          <span>Confirmar</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div
+    id="toast"
+    class="toast"
+    hidden
+    role="status"
+    aria-live="polite"
+  ></div>
+
+  <?!= include('Scripts'); ?>
+</body>
+</html>

@@ -1,0 +1,29 @@
+# Google Apps Script / clasp - configuracoes locais
+.clasp.json
+.clasprc.json
+
+# Credenciais e configuracoes privadas
+.env
+.env.*
+credentials.json
+secrets.json
+
+# Backups e artefatos locais
+backup/
+backup-*/
+*.bak
+*.tmp
+*.log
+*.zip
+
+# Documentos gerados localmente
+*.docx
+*.pdf
+
+# Dependencias e editores
+node_modules/
+.vscode/
+
+# Sistema operacional
+Thumbs.db
+.DS_Store

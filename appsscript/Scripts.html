@@ -1,0 +1,3425 @@
+<script>
+  (function () {
+    'use strict';
+
+    const state = {
+      colaboradores: [],
+      indicadores: {},
+      pesquisa: '',
+      filtroDepartamento: '',
+      filtroStatus: '',
+      ordenacao: 'recent',
+      dashboardDepartamento: '',
+      dashboardStatus: '',
+      tarefaPesquisa: '',
+      tarefaStatus: '',
+      tarefaArea: '',
+      tarefaOrdenacao: 'order',
+      toastTimer: null,
+      detalhesAtuais: null,
+      acaoTarefaEmAndamento: false,
+      acaoOnboardingEmAndamento: false,
+      confirmacaoPendente: null,
+      ultimoFocoModal: null,
+      focoAnteriorConfirmacao: null,
+      focoAnteriorResultado: null,
+      detalhesRecordIdAtual: '',
+      detalhesTimeout: null,
+      detalhesRequestToken: 0,
+      historicoCategoria: '',
+      demoAutofillIndex: 0,
+      detalhesAbaAtual: 'summary',
+      detalhesScrollPorAba: {
+        summary: 0,
+        tasks: 0,
+        history: 0
+      },
+      detalhesAbasVisitadas: {
+        summary: true,
+        tasks: false,
+        history: false
+      },
+      centralTarefasDados: null,
+      centralTarefasCarregada: false,
+      centralTarefasCarregando: false,
+      centralTarefasPesquisa: '',
+      centralTarefasProcesso: 'active',
+      centralTarefasStatus: '',
+      centralTarefasArea: '',
+      centralTarefasDepartamento: '',
+      centralTarefasFase: '',
+      centralTarefasOrdenacao: 'flow',
+      etapaTarefaGrupoAtual: null,
+      etapaTarefaPesquisa: '',
+      etapaTarefaProcesso: 'active',
+      etapaTarefaStatus: '',
+      etapaTarefaDepartamento: '',
+      etapaTarefaOrdenacao: 'status',
+      etapaTarefaUltimoFoco: null,
+      centralTarefasRetornoGrupo: '',
+      centralTarefasVoltando: false,
+      detalhesAbaSolicitada: '',
+      detalhesTarefaSolicitada: ''
+    };
+
+    document.addEventListener('DOMContentLoaded', inicializarAplicacao);
+
+    function inicializarAplicacao() {
+      registrarEventos();
+      inicializarDetalhesOnboarding();
+      inicializarCentralTarefas();
+      carregarDadosIniciais(true);
+    }
+
+    function registrarEventos() {
+      document.querySelectorAll('[data-view]').forEach(function (button) {
+        button.addEventListener('click', function () {
+          trocarVisualizacao(button.dataset.view);
+        });
+      });
+
+      document.querySelectorAll('[data-go-view]').forEach(function (button) {
+        button.addEventListener('click', function () {
+          trocarVisualizacao(button.dataset.goView);
+        });
+      });
+
+      document.getElementById('refreshButton').addEventListener('click', function () {
+        carregarDadosIniciais(true);
+      });
+
+      document.getElementById('onboardingForm').addEventListener('submit', enviarFormulario);
+      document.getElementById('cancelOnboardingFormButton').addEventListener('click', solicitarCancelamentoCadastro);
+
+      document.getElementById('collaboratorSearch').addEventListener('input', function (event) {
+        state.pesquisa = event.target.value.trim().toLocaleLowerCase('pt-BR');
+        renderizarTabelaCompleta();
+      });
+
+      document.getElementById('collaboratorDepartmentFilter').addEventListener('change', function (event) {
+        state.filtroDepartamento = event.target.value;
+        renderizarTabelaCompleta();
+      });
+
+      document.getElementById('collaboratorStatusFilter').addEventListener('change', function (event) {
+        state.filtroStatus = event.target.value;
+        renderizarTabelaCompleta();
+      });
+
+      document.getElementById('collaboratorSort').addEventListener('change', function (event) {
+        state.ordenacao = event.target.value || 'recent';
+        renderizarTabelaCompleta();
+      });
+
+      document.getElementById('clearCollaboratorFilters').addEventListener('click', limparFiltrosColaboradores);
+      document.getElementById('exportCollaboratorsButton').addEventListener('click', exportarColaboradoresCsv);
+
+      document.getElementById('dashboardDepartmentFilter').addEventListener('change', function (event) {
+        state.dashboardDepartamento = event.target.value;
+        renderizarDashboard();
+      });
+
+      document.getElementById('dashboardStatusFilter').addEventListener('change', function (event) {
+        state.dashboardStatus = event.target.value;
+        renderizarDashboard();
+      });
+
+      document.getElementById('clearDashboardFilters').addEventListener('click', limparFiltrosDashboard);
+
+      document.querySelectorAll('[data-dashboard-status]').forEach(function (card) {
+        card.addEventListener('click', function () {
+          state.dashboardStatus = card.dataset.dashboardStatus || '';
+          document.getElementById('dashboardStatusFilter').value = state.dashboardStatus;
+          renderizarDashboard();
+        });
+      });
+
+      document.getElementById('dashboardInsightAction').addEventListener('click', function (event) {
+        const button = event.currentTarget;
+        const status = button.dataset.dashboardStatus || '';
+        const view = button.dataset.goView || '';
+
+        if (status === '__clear__') {
+          limparFiltrosDashboard();
+          return;
+        }
+
+        if (status) {
+          state.dashboardStatus = status;
+          document.getElementById('dashboardStatusFilter').value = status;
+          renderizarDashboard();
+          return;
+        }
+
+        if (view) {
+          trocarVisualizacao(view);
+        }
+      });
+
+      document.getElementById('closeResultModal').addEventListener('click', fecharModal);
+      document.getElementById('resultModalConfirm').addEventListener('click', function () {
+        fecharModal();
+        trocarVisualizacao('dashboard');
+      });
+
+      document.getElementById('resultModal').addEventListener('click', function (event) {
+        if (event.target.id === 'resultModal') fecharModal();
+      });
+
+      document.getElementById('closeConfirmationModal').addEventListener('click', fecharConfirmacao);
+      document.getElementById('confirmationCancelButton').addEventListener('click', fecharConfirmacao);
+      document.getElementById('confirmationConfirmButton').addEventListener('click', executarConfirmacaoPendente);
+      document.getElementById('confirmationModal').addEventListener('click', function (event) {
+        if (event.target.id === 'confirmationModal') fecharConfirmacao();
+      });
+    }
+    function trocarVisualizacao(nome) {
+      const visualizacao = nome || 'dashboard';
+
+      document.querySelectorAll('.view-section').forEach(function (section) {
+        section.classList.remove('is-active');
+      });
+
+      document.querySelectorAll('.nav-button').forEach(function (button) {
+        button.classList.toggle('is-active', button.dataset.view === visualizacao);
+      });
+
+      const alvo = document.getElementById('view-' + visualizacao);
+      if (alvo) {
+        alvo.classList.add('is-active');
+      }
+
+      if (visualizacao === 'tasks') {
+        carregarCentralTarefas(false);
+      }
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function carregarDadosIniciais(mostrarCarregamento) {
+      definirConexao('loading', 'Carregando');
+
+      if (mostrarCarregamento) {
+        definirCarregamento(
+          true,
+          'Carregando dados',
+          'Consultando o Airtable e atualizando o painel operacional.'
+        );
+      }
+
+      google.script.run
+        .withSuccessHandler(function (resultado) {
+          definirCarregamento(false);
+
+          if (!resultado || !resultado.sucesso) {
+            tratarErro(
+              resultado && resultado.mensagem
+                ? resultado.mensagem
+                : 'Não foi possível carregar os dados.'
+            );
+            return;
+          }
+
+          state.colaboradores = Array.isArray(resultado.colaboradores)
+            ? resultado.colaboradores
+            : [];
+          state.indicadores = resultado.indicadores || {};
+
+          document.getElementById('environmentMessage').textContent =
+            resultado.mensagemAmbiente || 'Ambiente de apresentação conectado.';
+
+          atualizarOpcoesFiltros();
+          renderizarDashboard();
+          renderizarTabelaCompleta();
+          definirConexao('connected', 'Conectado');
+        })
+        .withFailureHandler(function (error) {
+          definirCarregamento(false);
+          tratarErro(extrairMensagemErro(error));
+        })
+        .obterDadosIniciais();
+    }
+    function renderizarDashboard() {
+      const colaboradores = obterColaboradoresDashboardFiltrados();
+      const indicadores = calcularIndicadoresCliente(colaboradores);
+
+      definirTexto('metricTotal', indicadores.total);
+      definirTexto('metricPending', indicadores.pendentes);
+      definirTexto('metricInProgress', indicadores.emAndamento);
+      definirTexto('metricCompleted', indicadores.concluidos);
+      definirTexto('metricCancelled', indicadores.cancelados);
+      definirTexto('metricAverageProgress', indicadores.progressoMedio + '%');
+      definirTexto('metricTasks', indicadores.tarefasGeradas);
+      definirTexto('metricEvents', indicadores.eventosCriados);
+      definirTexto('metricEmails', indicadores.emailsEnviados);
+      definirTexto('metricOverdueTasks', indicadores.tarefasAtrasadas);
+
+      const mediaTarefas = indicadores.total
+        ? indicadores.tarefasGeradas / indicadores.total
+        : 0;
+      const coberturaEventos = indicadores.total
+        ? Math.round((indicadores.eventosCriados / indicadores.total) * 100)
+        : 0;
+      const coberturaEmails = indicadores.total
+        ? Math.round((indicadores.emailsEnviados / indicadores.total) * 100)
+        : 0;
+
+      definirTexto(
+        'metricTasksDetail',
+        formatarNumeroCompacto(mediaTarefas) +
+          (mediaTarefas === 1 ? ' tarefa por processo' : ' tarefas por processo')
+      );
+      definirTexto('metricEventsDetail', coberturaEventos + '% de cobertura');
+      definirTexto('metricEmailsDetail', coberturaEmails + '% de cobertura');
+      definirTexto(
+        'metricOverdueDetail',
+        indicadores.tarefasAtrasadas
+          ? pluralizarQuantidade(indicadores.tarefasAtrasadas, 'prazo exige atenção', 'prazos exigem atenção')
+          : 'Nenhum prazo vencido'
+      );
+
+      document.getElementById('metricEventsBar').style.width = coberturaEventos + '%';
+      document.getElementById('metricEmailsBar').style.width = coberturaEmails + '%';
+
+      atualizarEstadoCardsDashboard();
+      atualizarInsightDashboard(indicadores);
+
+      const filtrosAtivos = [
+        state.dashboardDepartamento,
+        state.dashboardStatus
+      ].filter(Boolean);
+
+      definirTexto(
+        'dashboardFilterSummary',
+        filtrosAtivos.length
+          ? pluralizarQuantidade(colaboradores.length, 'processo no recorte selecionado', 'processos no recorte selecionado')
+          : 'Exibindo todos os processos'
+      );
+
+      definirTexto(
+        'dashboardResultCount',
+        colaboradores.length === 1
+          ? '1 processo encontrado no recorte atual.'
+          : colaboradores.length + ' processos encontrados no recorte atual.'
+      );
+
+      renderizarDistribuicaoStatus(indicadores);
+
+      renderizarLinhas(
+        colaboradores.slice(0, 5),
+        'recentCollaboratorsBody',
+        filtrosAtivos.length
+          ? 'Nenhum onboarding corresponde aos filtros selecionados.'
+          : 'Nenhum onboarding foi cadastrado.'
+      );
+    }
+
+    function pluralizarQuantidade(quantidade, singular, plural) {
+      const numero = Number(quantidade || 0);
+      return numero + ' ' + (numero === 1 ? singular : plural);
+    }
+
+    function definirIconeFontAwesome(elemento, classeIcone) {
+      if (!elemento) return;
+      elemento.innerHTML = '<i class="fa-solid ' + classeIcone + '" aria-hidden="true"></i>';
+    }
+
+    function definirConteudoBotao(button, classeIcone, texto) {
+      if (!button) return;
+      button.innerHTML =
+        '<i class="fa-solid ' + classeIcone + '" aria-hidden="true"></i>' +
+        '<span>' + escaparHtml(texto) + '</span>';
+    }
+
+    function atualizarEstadoCardsDashboard() {
+      document.querySelectorAll('[data-dashboard-status]').forEach(function (card) {
+        const ativo = (card.dataset.dashboardStatus || '') === state.dashboardStatus;
+        card.classList.toggle('is-active', ativo);
+        card.setAttribute('aria-pressed', String(ativo));
+      });
+    }
+
+    function atualizarInsightDashboard(indicadores) {
+      const insight = document.getElementById('dashboardInsight');
+      const icon = document.getElementById('dashboardInsightIcon');
+      const title = document.getElementById('dashboardInsightTitle');
+      const text = document.getElementById('dashboardInsightText');
+      const action = document.getElementById('dashboardInsightAction');
+
+      insight.className = 'dashboard-insight';
+      action.hidden = true;
+      action.dataset.dashboardStatus = '';
+      action.dataset.goView = '';
+
+      if (!indicadores.total) {
+        const possuiFiltro = Boolean(state.dashboardDepartamento || state.dashboardStatus);
+        insight.classList.add('is-neutral');
+        definirIconeFontAwesome(icon, 'fa-magnifying-glass');
+        title.textContent = possuiFiltro
+          ? 'Nenhum processo neste recorte'
+          : 'Nenhum onboarding cadastrado';
+        text.textContent = possuiFiltro
+          ? 'Altere ou limpe os filtros para visualizar outros processos.'
+          : 'Cadastre o primeiro colaborador para iniciar o acompanhamento operacional.';
+        action.hidden = false;
+        definirConteudoBotao(
+          action,
+          possuiFiltro ? 'fa-filter-circle-xmark' : 'fa-user-plus',
+          possuiFiltro ? 'Limpar filtros' : 'Novo onboarding'
+        );
+        if (possuiFiltro) action.dataset.dashboardStatus = '__clear__';
+        else action.dataset.goView = 'new';
+        return;
+      }
+
+      if (indicadores.tarefasAtrasadas > 0) {
+        insight.classList.add('is-danger');
+        definirIconeFontAwesome(icon, 'fa-triangle-exclamation');
+        title.textContent = pluralizarQuantidade(indicadores.tarefasAtrasadas, 'tarefa com prazo vencido', 'tarefas com prazo vencido');
+        text.textContent = 'Revise os processos ativos para evitar impacto no cronograma de integração.';
+        action.hidden = false;
+        definirConteudoBotao(action, 'fa-users', 'Abrir colaboradores');
+        action.dataset.goView = 'collaborators';
+        return;
+      }
+
+      if (indicadores.pendentes > 0) {
+        insight.classList.add('is-warning');
+        definirIconeFontAwesome(icon, 'fa-arrow-right');
+        title.textContent = pluralizarQuantidade(indicadores.pendentes, 'processo aguarda início', 'processos aguardam início');
+        text.textContent = 'Inicie a primeira tarefa para movimentar o processo e atualizar o progresso operacional.';
+        action.hidden = false;
+        definirConteudoBotao(action, 'fa-clock', 'Ver pendentes');
+        action.dataset.dashboardStatus = 'Pendente';
+        return;
+      }
+
+      if (indicadores.emAndamento > 0) {
+        insight.classList.add('is-info');
+        definirIconeFontAwesome(icon, 'fa-circle-play');
+        title.textContent = pluralizarQuantidade(indicadores.emAndamento, 'processo em andamento', 'processos em andamento');
+        text.textContent = 'A operação está ativa. Acompanhe tarefas, prazos e histórico de cada colaborador.';
+        action.hidden = false;
+        definirConteudoBotao(action, 'fa-circle-play', 'Ver em andamento');
+        action.dataset.dashboardStatus = 'Em andamento';
+        return;
+      }
+
+      if (indicadores.concluidos === indicadores.total) {
+        insight.classList.add('is-success');
+        definirIconeFontAwesome(icon, 'fa-circle-check');
+        title.textContent = 'Todos os processos do recorte foram concluídos';
+        text.textContent = 'As etapas obrigatórias foram finalizadas e o progresso está consolidado.';
+        return;
+      }
+
+      insight.classList.add('is-neutral');
+      definirIconeFontAwesome(icon, 'fa-circle-info');
+      title.textContent = 'Recorte operacional atualizado';
+      text.textContent = 'Os indicadores refletem os filtros selecionados e os dados atuais do Airtable.';
+    }
+
+    function formatarNumeroCompacto(valor) {
+      const numero = Number(valor || 0);
+      return Number.isInteger(numero)
+        ? String(numero)
+        : numero.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+    }
+
+    function renderizarTabelaCompleta() {
+      const filtrados = obterColaboradoresFiltrados();
+
+      definirTexto(
+        'collaboratorCount',
+        filtrados.length === 1
+          ? '1 colaborador encontrado'
+          : filtrados.length + ' colaboradores encontrados'
+      );
+
+      renderizarLinhas(
+        filtrados,
+        'allCollaboratorsBody',
+        possuiFiltrosColaboradores()
+          ? 'Nenhum colaborador corresponde aos filtros.'
+          : 'Nenhum onboarding foi cadastrado.'
+      );
+    }
+    function atualizarOpcoesFiltros() {
+      const departamentos = Array.from(
+        new Set(
+          state.colaboradores
+            .map(function (item) { return item.departamento; })
+            .filter(Boolean)
+        )
+      ).sort(function (a, b) { return a.localeCompare(b, 'pt-BR'); });
+
+      const status = ['Pendente', 'Em andamento', 'Concluído', 'Cancelado'];
+
+      popularSelect('dashboardDepartmentFilter', departamentos, 'Todos os departamentos', state.dashboardDepartamento);
+      popularSelect('collaboratorDepartmentFilter', departamentos, 'Todos', state.filtroDepartamento);
+      popularSelect('dashboardStatusFilter', status, 'Todos os status', state.dashboardStatus);
+      popularSelect('collaboratorStatusFilter', status, 'Todos', state.filtroStatus);
+    }
+
+    function popularSelect(id, opcoes, rotuloPadrao, valorAtual) {
+      const select = document.getElementById(id);
+      if (!select) return;
+
+      select.innerHTML =
+        '<option value="">' + escaparHtml(rotuloPadrao) + '</option>' +
+        opcoes.map(function (opcao) {
+          return '<option value="' + escaparAtributo(opcao) + '">' +
+            escaparHtml(opcao) +
+            '</option>';
+        }).join('');
+
+      select.value = valorAtual || '';
+    }
+
+    function obterColaboradoresDashboardFiltrados() {
+      return state.colaboradores.filter(function (colaborador) {
+        return (
+          (!state.dashboardDepartamento || colaborador.departamento === state.dashboardDepartamento) &&
+          (!state.dashboardStatus || colaborador.status === state.dashboardStatus)
+        );
+      });
+    }
+
+    function possuiFiltrosColaboradores() {
+      return Boolean(
+        state.pesquisa ||
+        state.filtroDepartamento ||
+        state.filtroStatus
+      );
+    }
+
+    function obterColaboradoresFiltrados() {
+      const filtrados = state.colaboradores.filter(function (colaborador) {
+        const correspondePesquisa = !state.pesquisa || [
+          colaborador.nome,
+          colaborador.cargo,
+          colaborador.departamento,
+          colaborador.status
+        ].join(' ').toLocaleLowerCase('pt-BR').includes(state.pesquisa);
+
+        return (
+          correspondePesquisa &&
+          (!state.filtroDepartamento || colaborador.departamento === state.filtroDepartamento) &&
+          (!state.filtroStatus || colaborador.status === state.filtroStatus)
+        );
+      });
+
+      return filtrados.sort(function (a, b) {
+        switch (state.ordenacao) {
+          case 'name':
+            return String(a.nome).localeCompare(String(b.nome), 'pt-BR');
+          case 'admission':
+            return String(a.dataAdmissao || '9999').localeCompare(String(b.dataAdmissao || '9999'));
+          case 'progress-desc':
+            return Number(b.progresso || 0) - Number(a.progresso || 0);
+          case 'progress-asc':
+            return Number(a.progresso || 0) - Number(b.progresso || 0);
+          default:
+            return new Date(b.criadoEm || 0).getTime() - new Date(a.criadoEm || 0).getTime();
+        }
+      });
+    }
+
+    function calcularIndicadoresCliente(colaboradores) {
+      const resumo = {
+        total: colaboradores.length,
+        pendentes: 0,
+        emAndamento: 0,
+        concluidos: 0,
+        cancelados: 0,
+        tarefasGeradas: 0,
+        eventosCriados: 0,
+        emailsEnviados: 0,
+        tarefasAtrasadas: 0,
+        progressoMedio: 0
+      };
+
+      let somaProgresso = 0;
+
+      colaboradores.forEach(function (colaborador) {
+        if (colaborador.status === 'Pendente') resumo.pendentes++;
+        else if (colaborador.status === 'Em andamento') resumo.emAndamento++;
+        else if (colaborador.status === 'Concluído') resumo.concluidos++;
+        else if (colaborador.status === 'Cancelado') resumo.cancelados++;
+
+        resumo.tarefasGeradas += Number(colaborador.quantidadeTarefas || 0);
+        resumo.tarefasAtrasadas += Number(colaborador.tarefasAtrasadas || 0);
+        if (colaborador.eventoCriado) resumo.eventosCriados++;
+        if (colaborador.emailEnviado) resumo.emailsEnviados++;
+        somaProgresso += Number(colaborador.progresso || 0);
+      });
+
+      resumo.progressoMedio = resumo.total
+        ? Math.round(somaProgresso / resumo.total)
+        : 0;
+
+      return resumo;
+    }
+
+    function renderizarDistribuicaoStatus(indicadores) {
+      const total = Number(indicadores.total || 0);
+      const itens = [
+        { chave: 'pendentes', rotulo: 'Pendentes', classe: 'is-pending' },
+        { chave: 'emAndamento', rotulo: 'Em andamento', classe: 'is-progress' },
+        { chave: 'concluidos', rotulo: 'Concluídos', classe: 'is-completed' },
+        { chave: 'cancelados', rotulo: 'Cancelados', classe: 'is-cancelled' }
+      ];
+
+      definirTexto(
+        'statusDistributionTotal',
+        total === 1 ? '1 processo' : total + ' processos'
+      );
+
+      document.getElementById('statusDistributionBar').innerHTML = itens.map(function (item) {
+        const quantidade = Number(indicadores[item.chave] || 0);
+        const percentual = total ? (quantidade / total) * 100 : 0;
+        return '<span class="status-segment ' + item.classe + '" style="width:' + percentual + '%" title="' +
+          escaparAtributo(item.rotulo + ': ' + quantidade) + '"></span>';
+      }).join('');
+
+      document.getElementById('statusDistributionLegend').innerHTML = itens.map(function (item) {
+        const quantidade = Number(indicadores[item.chave] || 0);
+        const percentual = total ? Math.round((quantidade / total) * 100) : 0;
+        return '<span class="distribution-legend-item"><i class="' + item.classe + '"></i>' +
+          '<span>' + escaparHtml(item.rotulo) + '</span><strong>' + quantidade + '</strong>' +
+          '<small>' + percentual + '%</small></span>';
+      }).join('');
+    }
+
+    function limparFiltrosDashboard() {
+      state.dashboardDepartamento = '';
+      state.dashboardStatus = '';
+      document.getElementById('dashboardDepartmentFilter').value = '';
+      document.getElementById('dashboardStatusFilter').value = '';
+      renderizarDashboard();
+    }
+
+    function limparFiltrosColaboradores() {
+      state.pesquisa = '';
+      state.filtroDepartamento = '';
+      state.filtroStatus = '';
+      state.ordenacao = 'recent';
+
+      document.getElementById('collaboratorSearch').value = '';
+      document.getElementById('collaboratorDepartmentFilter').value = '';
+      document.getElementById('collaboratorStatusFilter').value = '';
+      document.getElementById('collaboratorSort').value = 'recent';
+      renderizarTabelaCompleta();
+    }
+
+    function exportarColaboradoresCsv() {
+      const colaboradores = obterColaboradoresFiltrados();
+
+      if (!colaboradores.length) {
+        mostrarToast('Não há registros para exportar.', 'error');
+        return;
+      }
+
+      const linhas = [[
+        'Nome', 'Cargo', 'Departamento', 'Admissão', 'Status', 'Progresso',
+        'Tarefas', 'Tarefas atrasadas', 'Agenda', 'E-mail'
+      ]];
+
+      colaboradores.forEach(function (item) {
+        linhas.push([
+          item.nome,
+          item.cargo,
+          item.departamento,
+          formatarData(item.dataAdmissao),
+          item.status,
+          item.progresso + '%',
+          item.quantidadeTarefas,
+          item.tarefasAtrasadas || 0,
+          item.eventoCriado ? 'Criado' : 'Pendente',
+          item.emailEnviado ? 'Enviado' : 'Pendente'
+        ]);
+      });
+
+      const csv = '﻿' + linhas.map(function (linha) {
+        return linha.map(function (valor) {
+          return '"' + String(valor == null ? '' : valor).replace(/"/g, '""') + '"';
+        }).join(';');
+      }).join('\r\n');
+
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'onboardflow-colaboradores-' + formatarDataInput(new Date()) + '.csv';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      mostrarToast('Arquivo CSV gerado com sucesso.', 'success');
+    }
+
+    function renderizarLinhas(colaboradores, bodyId, mensagemVazia) {
+      const tbody = document.getElementById(bodyId);
+
+      if (!colaboradores.length) {
+        tbody.innerHTML =
+          '<tr><td colspan="9" class="empty-cell">' +
+            '<div class="table-empty-state">' +
+              '<span aria-hidden="true"><i class="fa-solid fa-magnifying-glass"></i></span>' +
+              '<strong>Nenhum resultado encontrado</strong>' +
+              '<p>' + escaparHtml(mensagemVazia) + '</p>' +
+            '</div>' +
+          '</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = colaboradores.map(criarLinhaColaborador).join('');
+    }
+
+    function criarLinhaColaborador(colaborador) {
+      const progresso = limitarNumero(colaborador.progresso, 0, 100);
+      const atrasadas = Number(colaborador.tarefasAtrasadas || 0);
+
+      return (
+        '<tr class="clickable-row row-status-' + normalizarClasse(colaborador.status || 'Pendente') + '" data-record-id="' +
+          escaparAtributo(colaborador.recordId) +
+        '" tabindex="0" role="button" aria-label="Abrir detalhes de ' +
+          escaparAtributo(colaborador.nome || 'colaborador') +
+        '">' +
+        '<td data-label="Colaborador"><div class="person-cell">' +
+          '<div class="person-name-line">' +
+            '<strong title="' + escaparAtributo(colaborador.nome) + '">' +
+              escaparHtml(colaborador.nome || 'Sem nome') +
+            '</strong>' +
+          '</div>' +
+          '<span>' + escaparHtml(colaborador.cargo || 'Cargo não informado') + '</span>' +
+        '</div></td>' +
+        '<td data-label="Departamento">' + escaparHtml(colaborador.departamento || '-') + '</td>' +
+        '<td data-label="Admissão">' + formatarData(colaborador.dataAdmissao) + '</td>' +
+        '<td data-label="Status">' + criarBadgeStatus(colaborador.status) + '</td>' +
+        '<td data-label="Progresso"><div class="progress-container">' +
+          '<div class="progress-label"><span>Progresso</span><strong>' + progresso + '%</strong></div>' +
+          '<div class="progress-track"><div class="progress-bar" style="width:' + progresso + '%"></div></div>' +
+        '</div></td>' +
+        '<td data-label="Tarefas"><div class="task-count-cell"><strong>' + String(colaborador.quantidadeTarefas || 0) + '</strong>' +
+          (atrasadas ? '<span class="overdue-inline-badge">' + pluralizarQuantidade(atrasadas, 'atrasada', 'atrasadas') + '</span>' : '') +
+        '</div></td>' +
+        '<td data-label="Agenda">' + criarBadgeIntegracao(colaborador.eventoCriado, 'Criado', 'Pendente') + '</td>' +
+        '<td data-label="E-mail">' + criarBadgeIntegracao(colaborador.emailEnviado, 'Enviado', 'Pendente') + '</td>' +
+        '<td data-label="Ação" class="table-action-cell"><span class="row-open-action" aria-hidden="true"><i class="fa-solid fa-arrow-right"></i></span>' +
+          '<span class="sr-only">Abrir detalhes</span></td>' +
+        '</tr>'
+      );
+    }
+    function criarBadgeStatus(status) {
+      const valor = status || 'Pendente';
+      return (
+        '<span class="status-badge status-' + normalizarClasse(valor) + '">' +
+        escaparHtml(valor) +
+        '</span>'
+      );
+    }
+
+    function criarBadgeIntegracao(concluido, textoConcluido, textoPendente) {
+      return (
+        '<span class="integration-badge ' +
+        (concluido ? 'integration-success' : 'integration-pending') + '">' +
+        (concluido
+          ? '<i class="fa-solid fa-circle-check" aria-hidden="true"></i> ' + textoConcluido
+          : '<i class="fa-regular fa-clock" aria-hidden="true"></i> ' + textoPendente) +
+        '</span>'
+      );
+    }
+
+
+
+    /* ===============================================================
+       CENTRAL DE TAREFAS E FLUXO DE ONBOARDING - v0.5.2
+       =============================================================== */
+
+    function inicializarCentralTarefas() {
+      document.getElementById('refreshTaskCenterButton').addEventListener('click', function () {
+        carregarCentralTarefas(true);
+      });
+
+      document.getElementById('clearTaskCenterFilters').addEventListener('click', limparFiltrosCentralTarefas);
+
+      document.getElementById('taskCenterSearch').addEventListener('input', function (event) {
+        state.centralTarefasPesquisa = normalizarTextoCentralCliente(event.target.value);
+        renderizarCentralTarefas();
+      });
+
+      document.getElementById('taskCenterProcessFilter').addEventListener('change', function (event) {
+        state.centralTarefasProcesso = event.target.value || 'active';
+        renderizarCentralTarefas();
+      });
+
+      document.getElementById('taskCenterStatusFilter').addEventListener('change', function (event) {
+        state.centralTarefasStatus = event.target.value;
+        renderizarCentralTarefas();
+      });
+
+      document.getElementById('taskCenterAreaFilter').addEventListener('change', function (event) {
+        state.centralTarefasArea = event.target.value;
+        renderizarCentralTarefas();
+      });
+
+      document.getElementById('taskCenterDepartmentFilter').addEventListener('change', function (event) {
+        state.centralTarefasDepartamento = event.target.value;
+        renderizarCentralTarefas();
+      });
+
+      document.getElementById('taskCenterPhaseFilter').addEventListener('change', function (event) {
+        state.centralTarefasFase = event.target.value;
+        renderizarCentralTarefas();
+      });
+
+      document.getElementById('taskCenterSort').addEventListener('change', function (event) {
+        state.centralTarefasOrdenacao = event.target.value || 'flow';
+        renderizarCentralTarefas();
+      });
+
+      document.getElementById('taskFlowContainer').addEventListener('click', function (event) {
+        const button = event.target.closest('[data-task-phase-filter]');
+        if (!button) return;
+
+        const fase = button.dataset.taskPhaseFilter || '';
+        state.centralTarefasFase = state.centralTarefasFase === fase ? '' : fase;
+        document.getElementById('taskCenterPhaseFilter').value = state.centralTarefasFase;
+        renderizarCentralTarefas();
+      });
+
+      document.getElementById('taskCenterGroups').addEventListener('click', function (event) {
+        const button = event.target.closest('[data-task-group-key]');
+        if (!button) return;
+        abrirModalEtapaTarefa(button.dataset.taskGroupKey);
+      });
+
+      document.getElementById('closeTaskStageModal').addEventListener('click', function () {
+        fecharModalEtapaTarefa(true);
+      });
+
+      document.getElementById('closeTaskStageModalFooter').addEventListener('click', function () {
+        fecharModalEtapaTarefa(true);
+      });
+
+      document.getElementById('taskStageModal').addEventListener('click', function (event) {
+        if (event.target.id === 'taskStageModal') {
+          fecharModalEtapaTarefa(true);
+        }
+      });
+
+      document.getElementById('taskStageSearch').addEventListener('input', function (event) {
+        state.etapaTarefaPesquisa = normalizarTextoCentralCliente(event.target.value);
+        atualizarListaColaboradoresEtapa();
+      });
+
+      document.getElementById('taskStageProcessFilter').addEventListener('change', function (event) {
+        state.etapaTarefaProcesso = event.target.value || 'active';
+        atualizarListaColaboradoresEtapa();
+      });
+
+      document.getElementById('taskStageStatusFilter').addEventListener('change', function (event) {
+        state.etapaTarefaStatus = event.target.value;
+        atualizarListaColaboradoresEtapa();
+      });
+
+      document.getElementById('taskStageDepartmentFilter').addEventListener('change', function (event) {
+        state.etapaTarefaDepartamento = event.target.value;
+        atualizarListaColaboradoresEtapa();
+      });
+
+      document.getElementById('taskStageSort').addEventListener('change', function (event) {
+        state.etapaTarefaOrdenacao = event.target.value || 'status';
+        atualizarListaColaboradoresEtapa();
+      });
+
+      document.getElementById('clearTaskStageFilters').addEventListener('click', limparFiltrosEtapaTarefa);
+
+      document.getElementById('taskStageCollaborators').addEventListener('click', function (event) {
+        const button = event.target.closest('[data-open-task-collaborator]');
+        if (!button) return;
+        abrirColaboradorDaEtapa(button.dataset.openTaskCollaborator);
+      });
+
+      document.getElementById('returnToTaskStageButton').addEventListener('click', voltarParaEtapaTarefa);
+    }
+
+    function normalizarTextoCentralCliente(valor) {
+      return String(valor || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase();
+    }
+
+    function carregarCentralTarefas(forcarAtualizacao, aoConcluir) {
+      if (state.centralTarefasCarregando) return;
+
+      if (state.centralTarefasCarregada && !forcarAtualizacao) {
+        renderizarCentralTarefas();
+        return;
+      }
+
+      state.centralTarefasCarregando = true;
+
+      definirCarregamento(
+        true,
+        'Carregando central de tarefas',
+        'Consultando tarefas, etapas e colaboradores.'
+      );
+
+      google.script.run
+        .withSuccessHandler(function (resultado) {
+          state.centralTarefasCarregando = false;
+          definirCarregamento(false);
+
+          if (!resultado || !resultado.sucesso) {
+            exibirErroCentralTarefas(
+              resultado && resultado.mensagem
+                ? resultado.mensagem
+                : 'Não foi possível carregar as tarefas.'
+            );
+            return;
+          }
+
+          state.centralTarefasDados = resultado;
+          state.centralTarefasCarregada = true;
+          popularFiltrosCentralTarefas();
+          renderizarCentralTarefas();
+
+          if (typeof aoConcluir === 'function') {
+            aoConcluir(resultado);
+          }
+
+          mostrarToast('Central de Tarefas atualizada.', 'success');
+        })
+        .withFailureHandler(function (error) {
+          state.centralTarefasCarregando = false;
+          definirCarregamento(false);
+          exibirErroCentralTarefas(extrairMensagemErro(error));
+        })
+        .obterCentralTarefasV052();
+    }
+
+    function exibirErroCentralTarefas(mensagem) {
+      state.centralTarefasCarregada = false;
+
+      document.getElementById('taskFlowContainer').innerHTML =
+        '<div class="task-center-empty-state is-error">' +
+          '<i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>' +
+          '<strong>Não foi possível carregar as tarefas</strong>' +
+          '<p>' + escaparHtml(mensagem || 'Atualize a página ou tente novamente em alguns instantes.') + '</p>' +
+          '<button type="button" class="button button-primary" data-retry-task-center>' +
+            '<i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i><span>Tentar novamente</span>' +
+          '</button>' +
+        '</div>';
+
+      document.getElementById('taskCenterGroups').innerHTML =
+        '<div class="task-center-empty-state is-error">' +
+          '<i class="fa-solid fa-cloud-arrow-down" aria-hidden="true"></i>' +
+          '<strong>Dados indisponíveis</strong>' +
+          '<p>A Central de Tarefas não pôde ser atualizada.</p>' +
+        '</div>';
+
+      const retry = document.querySelector('[data-retry-task-center]');
+      if (retry) retry.addEventListener('click', function () { carregarCentralTarefas(true); });
+
+      tratarErro(mensagem || 'Não foi possível carregar a Central de Tarefas.');
+    }
+
+    function popularFiltrosCentralTarefas() {
+      const dados = state.centralTarefasDados || {};
+      const opcoes = dados.opcoes || {};
+
+      preencherSelectCentralTarefas(
+        'taskCenterAreaFilter',
+        (opcoes.areas || []).map(function (area) { return { valor: area, texto: area }; }),
+        'Todas as áreas',
+        state.centralTarefasArea
+      );
+
+      preencherSelectCentralTarefas(
+        'taskCenterDepartmentFilter',
+        (opcoes.departamentos || []).map(function (departamento) {
+          return { valor: departamento, texto: departamento };
+        }),
+        'Todos os departamentos',
+        state.centralTarefasDepartamento
+      );
+
+      preencherSelectCentralTarefas(
+        'taskCenterPhaseFilter',
+        (opcoes.fases || []).map(function (fase) {
+          return { valor: fase.id, texto: fase.nome };
+        }),
+        'Todas as fases',
+        state.centralTarefasFase
+      );
+    }
+
+    function preencherSelectCentralTarefas(id, opcoes, rotuloPadrao, selecionado) {
+      const select = document.getElementById(id);
+      if (!select) return;
+
+      select.innerHTML =
+        '<option value="">' + escaparHtml(rotuloPadrao) + '</option>' +
+        opcoes.map(function (opcao) {
+          return '<option value="' + escaparAtributo(opcao.valor) + '"' +
+            (opcao.valor === selecionado ? ' selected' : '') + '>' +
+            escaparHtml(opcao.texto) + '</option>';
+        }).join('');
+    }
+
+    function limparFiltrosCentralTarefas() {
+      state.centralTarefasPesquisa = '';
+      state.centralTarefasProcesso = 'active';
+      state.centralTarefasStatus = '';
+      state.centralTarefasArea = '';
+      state.centralTarefasDepartamento = '';
+      state.centralTarefasFase = '';
+      state.centralTarefasOrdenacao = 'flow';
+
+      document.getElementById('taskCenterSearch').value = '';
+      document.getElementById('taskCenterProcessFilter').value = 'active';
+      document.getElementById('taskCenterStatusFilter').value = '';
+      document.getElementById('taskCenterAreaFilter').value = '';
+      document.getElementById('taskCenterDepartmentFilter').value = '';
+      document.getElementById('taskCenterPhaseFilter').value = '';
+      document.getElementById('taskCenterSort').value = 'flow';
+
+      renderizarCentralTarefas();
+    }
+
+    function calcularResumoExecucoesCliente(execucoes) {
+      const resumo = {
+        total: 0,
+        pendentes: 0,
+        emAndamento: 0,
+        concluidas: 0,
+        atrasadas: 0,
+        canceladas: 0,
+        ignoradas: 0,
+        progresso: 0
+      };
+
+      (execucoes || []).forEach(function (execucao) {
+        resumo.total++;
+        if (execucao.status === 'Concluída') resumo.concluidas++;
+        else if (execucao.status === 'Em andamento') resumo.emAndamento++;
+        else if (execucao.status === 'Onboarding cancelado') resumo.canceladas++;
+        else if (execucao.status === 'Não aplicável') resumo.ignoradas++;
+        else resumo.pendentes++;
+        if (execucao.atrasada) resumo.atrasadas++;
+      });
+
+      const ativas = Math.max(0, resumo.total - resumo.ignoradas);
+      resumo.progresso = ativas > 0
+        ? Math.round((resumo.concluidas / ativas) * 100)
+        : 0;
+
+      return resumo;
+    }
+
+    function correspondeFiltroProcessoCentral(colaborador, filtro) {
+      const valor = filtro || 'active';
+
+      if (valor === 'all') {
+        return true;
+      }
+
+      if (valor === 'cancelled') {
+        return Boolean(colaborador.processoCancelado);
+      }
+
+      return !colaborador.processoCancelado;
+    }
+
+    function obterGruposFiltradosCentralTarefas(opcoes) {
+      const configuracao = opcoes || {};
+      const ignorarFase = Boolean(configuracao.ignorarFase);
+      const dados = state.centralTarefasDados || {};
+      const grupos = Array.isArray(dados.grupos) ? dados.grupos : [];
+      const pesquisa = state.centralTarefasPesquisa;
+
+      const filtrados = grupos.map(function (grupo) {
+        if (state.centralTarefasArea && grupo.areaResponsavel !== state.centralTarefasArea) return null;
+        if (!ignorarFase && state.centralTarefasFase && grupo.fase !== state.centralTarefasFase) return null;
+
+        const textoGrupo = normalizarTextoCentralCliente([
+          grupo.titulo,
+          grupo.categoria,
+          grupo.areaResponsavel,
+          grupo.faseNome
+        ].join(' '));
+
+        const pesquisaCorrespondeAoGrupo = !pesquisa || textoGrupo.indexOf(pesquisa) >= 0;
+
+        const colaboradores = (grupo.colaboradores || []).filter(function (colaborador) {
+          const correspondeProcesso = correspondeFiltroProcessoCentral(
+            colaborador,
+            state.centralTarefasProcesso
+          );
+
+          const correspondeStatus = !state.centralTarefasStatus ||
+            (state.centralTarefasStatus === 'Atrasada'
+              ? colaborador.atrasada
+              : colaborador.status === state.centralTarefasStatus);
+
+          const correspondeDepartamento = !state.centralTarefasDepartamento ||
+            colaborador.departamento === state.centralTarefasDepartamento;
+
+          const textoColaborador = normalizarTextoCentralCliente([
+            colaborador.nome,
+            colaborador.cargo,
+            colaborador.departamento,
+            colaborador.statusOnboarding
+          ].join(' '));
+
+          const correspondePesquisa = pesquisaCorrespondeAoGrupo ||
+            !pesquisa ||
+            textoColaborador.indexOf(pesquisa) >= 0;
+
+          return correspondeProcesso && correspondeStatus && correspondeDepartamento && correspondePesquisa;
+        });
+
+        if (!colaboradores.length) return null;
+
+        const resumo = calcularResumoExecucoesCliente(colaboradores);
+        return Object.assign({}, grupo, resumo, { colaboradores: colaboradores });
+      }).filter(Boolean);
+
+      return filtrados.sort(function (a, b) {
+        switch (state.centralTarefasOrdenacao) {
+          case 'people':
+            return b.total - a.total || a.titulo.localeCompare(b.titulo, 'pt-BR');
+          case 'pending':
+            return b.pendentes - a.pendentes || b.emAndamento - a.emAndamento;
+          case 'overdue':
+            return b.atrasadas - a.atrasadas || b.pendentes - a.pendentes;
+          case 'alphabetical':
+            return a.titulo.localeCompare(b.titulo, 'pt-BR');
+          default:
+            return a.faseOrdem - b.faseOrdem ||
+              Number(a.ordem || 999) - Number(b.ordem || 999) ||
+              a.titulo.localeCompare(b.titulo, 'pt-BR');
+        }
+      });
+    }
+
+    function obterRotuloFiltroProcessoCentral(valor) {
+      if (valor === 'cancelled') {
+        return 'processos cancelados';
+      }
+
+      if (valor === 'all') {
+        return 'todos os processos';
+      }
+
+      return 'processos ativos';
+    }
+
+    function renderizarCentralTarefas() {
+      if (!state.centralTarefasCarregada || !state.centralTarefasDados) return;
+
+      const grupos = obterGruposFiltradosCentralTarefas();
+      const execucoes = [];
+      const colaboradoresUnicos = {};
+
+      grupos.forEach(function (grupo) {
+        grupo.colaboradores.forEach(function (colaborador) {
+          execucoes.push(colaborador);
+          if (colaborador.colaboradorRecordId) {
+            colaboradoresUnicos[colaborador.colaboradorRecordId] = true;
+          }
+        });
+      });
+
+      const resumo = calcularResumoExecucoesCliente(execucoes);
+
+      definirTexto('taskMetricTotal', resumo.total);
+      definirTexto('taskMetricPending', resumo.pendentes);
+      definirTexto('taskMetricInProgress', resumo.emAndamento);
+      definirTexto('taskMetricCompleted', resumo.concluidas);
+      definirTexto('taskMetricOverdue', resumo.atrasadas);
+      definirTexto('taskMetricCollaborators', Object.keys(colaboradoresUnicos).length);
+      const rotuloProcesso = obterRotuloFiltroProcessoCentral(
+        state.centralTarefasProcesso
+      );
+
+      definirTexto(
+        'taskMetricTotalDetail',
+        pluralizarQuantidade(grupos.length, 'etapa consolidada', 'etapas consolidadas') +
+        ' · ' + rotuloProcesso
+      );
+
+      const gruposOriginais = Array.isArray(state.centralTarefasDados.grupos)
+        ? state.centralTarefasDados.grupos
+        : [];
+
+      const totalGrupos = gruposOriginais.filter(function (grupo) {
+        return (grupo.colaboradores || []).some(function (colaborador) {
+          return correspondeFiltroProcessoCentral(
+            colaborador,
+            state.centralTarefasProcesso
+          );
+        });
+      }).length;
+
+      definirTexto(
+        'taskCenterResultSummary',
+        'Exibindo ' + grupos.length + ' de ' + totalGrupos +
+        ' etapas no recorte de ' + rotuloProcesso + ' · ' +
+        pluralizarQuantidade(resumo.total, 'execução', 'execuções') +
+        (resumo.canceladas > 0
+          ? ' · ' + pluralizarQuantidade(resumo.canceladas, 'tarefa cancelada', 'tarefas canceladas')
+          : '')
+      );
+
+      renderizarFluxoCentralTarefas(obterGruposFiltradosCentralTarefas({ ignorarFase: true }));
+      renderizarGruposCentralTarefas(grupos);
+    }
+
+    function renderizarFluxoCentralTarefas(grupos) {
+      const dados = state.centralTarefasDados || {};
+      const fasesBase = Array.isArray(dados.fases) ? dados.fases : [];
+      const container = document.getElementById('taskFlowContainer');
+
+      const fases = fasesBase.map(function (fase) {
+        const gruposDaFase = grupos.filter(function (grupo) { return grupo.fase === fase.id; });
+        const execucoes = [];
+        gruposDaFase.forEach(function (grupo) {
+          grupo.colaboradores.forEach(function (colaborador) { execucoes.push(colaborador); });
+        });
+        return Object.assign({}, fase, calcularResumoExecucoesCliente(execucoes), {
+          etapas: gruposDaFase.length
+        });
+      });
+
+      const resumoFluxo = calcularResumoExecucoesCliente(
+        fases.reduce(function (lista, fase) {
+          const gruposDaFase = grupos.filter(function (grupo) { return grupo.fase === fase.id; });
+          gruposDaFase.forEach(function (grupo) {
+            grupo.colaboradores.forEach(function (colaborador) { lista.push(colaborador); });
+          });
+          return lista;
+        }, [])
+      );
+
+      const faseSelecionada = fasesBase.filter(function (fase) {
+        return fase.id === state.centralTarefasFase;
+      })[0];
+
+      definirTexto(
+        'taskFlowSummary',
+        fases.length + ' fases · ' + resumoFluxo.progresso + '% concluído · ' +
+        obterRotuloFiltroProcessoCentral(state.centralTarefasProcesso) +
+        (faseSelecionada ? ' · Filtro ativo: ' + faseSelecionada.nome : '')
+      );
+
+      container.innerHTML = fases.map(function (fase, indice) {
+        const ativa = state.centralTarefasFase === fase.id;
+        const semDados = fase.total === 0;
+        const atenuada = Boolean(state.centralTarefasFase && !ativa);
+
+        return (
+          '<button type="button" class="task-flow-step' +
+            (ativa ? ' is-active' : '') +
+            (semDados ? ' is-empty' : '') +
+            (atenuada ? ' is-filter-muted' : '') +
+          '" data-task-phase-filter="' + escaparAtributo(fase.id) + '"' +
+          ' aria-pressed="' + (ativa ? 'true' : 'false') + '">' +
+            '<span class="task-flow-number">' + String(indice + 1).padStart(2, '0') + '</span>' +
+            '<span class="task-flow-icon" aria-hidden="true"><i class="fa-solid ' + escaparAtributo(fase.icone) + '"></i></span>' +
+            '<span class="task-flow-content">' +
+              '<strong>' + escaparHtml(fase.nome) + '</strong>' +
+              '<small>' + escaparHtml(fase.descricao) + '</small>' +
+              '<span class="task-flow-stats">' +
+                pluralizarQuantidade(fase.etapas, 'etapa', 'etapas') + ' · ' +
+                pluralizarQuantidade(fase.total, 'execução', 'execuções') +
+              '</span>' +
+              '<span class="task-flow-progress"><span style="width:' + limitarNumero(fase.progresso, 0, 100) + '%"></span></span>' +
+              '<span class="task-flow-progress-label">' + limitarNumero(fase.progresso, 0, 100) + '% concluído</span>' +
+            '</span>' +
+          '</button>'
+        );
+      }).join('');
+    }
+
+    function renderizarGruposCentralTarefas(grupos) {
+      const container = document.getElementById('taskCenterGroups');
+
+      if (!grupos.length) {
+        container.innerHTML =
+          '<div class="task-center-empty-state">' +
+            '<i class="fa-solid fa-list-check" aria-hidden="true"></i>' +
+            '<strong>Nenhuma tarefa encontrada</strong>' +
+            '<p>Altere os filtros ou verifique os processos cadastrados.</p>' +
+            '<button type="button" class="button button-secondary" data-clear-task-center-empty>' +
+              '<i class="fa-solid fa-filter-circle-xmark" aria-hidden="true"></i><span>Limpar filtros</span>' +
+            '</button>' +
+          '</div>';
+
+        const clear = container.querySelector('[data-clear-task-center-empty]');
+        if (clear) clear.addEventListener('click', limparFiltrosCentralTarefas);
+        return;
+      }
+
+      container.innerHTML = grupos.map(criarCardGrupoCentralTarefas).join('');
+    }
+
+    function criarCardGrupoCentralTarefas(grupo) {
+      const progresso = limitarNumero(grupo.progresso, 0, 100);
+
+      return (
+        '<article class="task-center-group-card phase-' + escaparAtributo(grupo.fase) + '">' +
+          '<div class="task-group-order">' + String(Number(grupo.ordem || 0)).padStart(2, '0') + '</div>' +
+          '<div class="task-group-main">' +
+            '<div class="task-group-heading">' +
+              '<div>' +
+                '<span class="task-phase-badge"><i class="fa-solid ' + escaparAtributo(grupo.faseIcone) + '" aria-hidden="true"></i> ' + escaparHtml(grupo.faseNome) + '</span>' +
+                '<h3>' + escaparHtml(grupo.titulo) + '</h3>' +
+                '<p>' + escaparHtml(grupo.categoria) + ' · ' + escaparHtml(grupo.areaResponsavel) + '</p>' +
+              '</div>' +
+              '<div class="task-group-total">' +
+                '<strong>' + grupo.total + '</strong>' +
+                '<span>' + (grupo.total === 1 ? 'colaborador' : 'colaboradores') + '</span>' +
+              '</div>' +
+            '</div>' +
+
+            '<div class="task-group-status-grid' + (grupo.canceladas > 0 ? ' has-cancelled' : '') + '">' +
+              criarEstatisticaGrupoTarefa('Aguardando', grupo.pendentes, 'fa-clock', 'pending') +
+              criarEstatisticaGrupoTarefa('Nesta etapa', grupo.emAndamento, 'fa-circle-play', 'progress') +
+              criarEstatisticaGrupoTarefa('Concluíram', grupo.concluidas, 'fa-circle-check', 'completed') +
+              criarEstatisticaGrupoTarefa('Atrasados', grupo.atrasadas, 'fa-triangle-exclamation', 'overdue') +
+              (grupo.canceladas > 0
+                ? criarEstatisticaGrupoTarefa('Onboarding cancelado', grupo.canceladas, 'fa-ban', 'cancelled')
+                : '') +
+            '</div>' +
+
+            '<div class="task-group-progress-row">' +
+              '<div class="task-group-progress-copy">' +
+                '<strong>' + progresso + '% concluído</strong>' +
+                '<span>' + grupo.concluidas + ' de ' + grupo.total + ' execuções finalizadas' +
+                  (grupo.canceladas > 0 ? ' · ' + grupo.canceladas + ' canceladas' : '') +
+                '</span>' +
+              '</div>' +
+              '<div class="task-group-progress-track"><span style="width:' + progresso + '%"></span></div>' +
+              '<button type="button" class="button button-secondary button-compact" data-task-group-key="' + escaparAtributo(grupo.chave) + '">' +
+                '<i class="fa-solid fa-users" aria-hidden="true"></i><span>Ver colaboradores</span><i class="fa-solid fa-arrow-right" aria-hidden="true"></i>' +
+              '</button>' +
+            '</div>' +
+          '</div>' +
+        '</article>'
+      );
+    }
+
+    function criarEstatisticaGrupoTarefa(rotulo, valor, icone, classe) {
+      return (
+        '<span class="task-group-stat is-' + classe + '">' +
+          '<i class="fa-solid ' + icone + '" aria-hidden="true"></i>' +
+          '<span><strong>' + String(valor || 0) + '</strong><small>' + escaparHtml(rotulo) + '</small></span>' +
+        '</span>'
+      );
+    }
+
+    function encontrarGrupoCentralTarefas(chave) {
+      const grupos = state.centralTarefasDados && Array.isArray(state.centralTarefasDados.grupos)
+        ? state.centralTarefasDados.grupos
+        : [];
+
+      return grupos.filter(function (grupo) { return grupo.chave === chave; })[0] || null;
+    }
+
+    function abrirModalEtapaTarefa(chave, reutilizarFoco) {
+      const grupo = encontrarGrupoCentralTarefas(chave);
+      if (!grupo) {
+        mostrarToast('Não foi possível localizar a etapa selecionada.', 'error');
+        return;
+      }
+
+      if (!reutilizarFoco) {
+        state.etapaTarefaUltimoFoco = document.activeElement;
+      }
+
+      state.etapaTarefaGrupoAtual = grupo;
+      state.etapaTarefaPesquisa = '';
+      state.etapaTarefaProcesso = state.centralTarefasProcesso || 'active';
+      state.etapaTarefaStatus = '';
+      state.etapaTarefaDepartamento = '';
+      state.etapaTarefaOrdenacao = 'status';
+
+      definirTexto('taskStageModalTitle', grupo.titulo);
+      definirTexto('taskStageModalSubtitle', grupo.categoria + ' · ' + grupo.areaResponsavel);
+
+      const phaseBadge = document.getElementById('taskStagePhaseBadge');
+      phaseBadge.innerHTML = '<i class="fa-solid ' + escaparAtributo(grupo.faseIcone) + '" aria-hidden="true"></i> ' + escaparHtml(grupo.faseNome);
+
+      popularFiltrosModalEtapa(grupo);
+      atualizarListaColaboradoresEtapa();
+
+      const modal = document.getElementById('taskStageModal');
+      const card = modal.querySelector('.task-stage-modal-card');
+      modal.hidden = false;
+      modal.setAttribute('aria-hidden', 'false');
+      document.body.classList.add('modal-open');
+      document.body.style.overflow = 'hidden';
+
+      window.requestAnimationFrame(function () {
+        card.focus({ preventScroll: true });
+      });
+    }
+
+    function renderizarResumoModalEtapa(execucoes) {
+      const resumo = calcularResumoExecucoesCliente(execucoes || []);
+      const cards = [
+        ['Total', resumo.total, 'fa-users', 'total'],
+        ['Pendentes', resumo.pendentes, 'fa-clock', 'pending'],
+        ['Em andamento', resumo.emAndamento, 'fa-circle-play', 'progress'],
+        ['Concluídos', resumo.concluidas, 'fa-circle-check', 'completed'],
+        ['Atrasados', resumo.atrasadas, 'fa-triangle-exclamation', 'overdue']
+      ];
+
+      if (resumo.canceladas > 0) {
+        cards.push([
+          'Onboarding cancelado',
+          resumo.canceladas,
+          'fa-ban',
+          'cancelled'
+        ]);
+      }
+
+      cards.push(['Conclusão', resumo.progresso + '%', 'fa-chart-line', 'average']);
+
+      document.getElementById('taskStageSummary').innerHTML = cards.map(function (card) {
+        return (
+          '<article class="task-stage-summary-card is-' + card[3] + '">' +
+            '<span aria-hidden="true"><i class="fa-solid ' + card[2] + '"></i></span>' +
+            '<div><small>' + escaparHtml(card[0]) + '</small><strong>' + escaparHtml(String(card[1])) + '</strong></div>' +
+          '</article>'
+        );
+      }).join('');
+    }
+
+    function popularFiltrosModalEtapa(grupo) {
+      const departamentos = Array.from(new Set((grupo.colaboradores || []).map(function (item) {
+        return item.departamento;
+      }).filter(Boolean))).sort(function (a, b) { return a.localeCompare(b, 'pt-BR'); });
+
+      preencherSelectCentralTarefas(
+        'taskStageDepartmentFilter',
+        departamentos.map(function (departamento) { return { valor: departamento, texto: departamento }; }),
+        'Todos',
+        ''
+      );
+
+      document.getElementById('taskStageSearch').value = '';
+      document.getElementById('taskStageProcessFilter').value = state.etapaTarefaProcesso;
+      document.getElementById('taskStageStatusFilter').value = '';
+      document.getElementById('taskStageSort').value = 'status';
+    }
+
+    function limparFiltrosEtapaTarefa() {
+      state.etapaTarefaPesquisa = '';
+      state.etapaTarefaProcesso = state.centralTarefasProcesso || 'active';
+      state.etapaTarefaStatus = '';
+      state.etapaTarefaDepartamento = '';
+      state.etapaTarefaOrdenacao = 'status';
+
+      document.getElementById('taskStageSearch').value = '';
+      document.getElementById('taskStageProcessFilter').value = state.etapaTarefaProcesso;
+      document.getElementById('taskStageStatusFilter').value = '';
+      document.getElementById('taskStageDepartmentFilter').value = '';
+      document.getElementById('taskStageSort').value = 'status';
+      atualizarListaColaboradoresEtapa();
+    }
+
+    function obterColaboradoresEtapaFiltrados() {
+      const grupo = state.etapaTarefaGrupoAtual;
+      if (!grupo) return [];
+
+      const pesquisa = state.etapaTarefaPesquisa;
+      const filtrados = (grupo.colaboradores || []).filter(function (colaborador) {
+        const correspondeProcesso = correspondeFiltroProcessoCentral(
+          colaborador,
+          state.etapaTarefaProcesso
+        );
+
+        const correspondeStatus = !state.etapaTarefaStatus ||
+          (state.etapaTarefaStatus === 'Atrasada'
+            ? colaborador.atrasada
+            : colaborador.status === state.etapaTarefaStatus);
+
+        const correspondeDepartamento = !state.etapaTarefaDepartamento ||
+          colaborador.departamento === state.etapaTarefaDepartamento;
+
+        const correspondePesquisa = !pesquisa || normalizarTextoCentralCliente([
+          colaborador.nome,
+          colaborador.cargo,
+          colaborador.departamento,
+          colaborador.statusOnboarding
+        ].join(' ')).indexOf(pesquisa) >= 0;
+
+        return correspondeProcesso && correspondeStatus && correspondeDepartamento && correspondePesquisa;
+      });
+
+      return filtrados.sort(function (a, b) {
+        if (state.etapaTarefaOrdenacao === 'name') {
+          return a.nome.localeCompare(b.nome, 'pt-BR');
+        }
+        if (state.etapaTarefaOrdenacao === 'deadline') {
+          return String(a.prazo || '9999').localeCompare(String(b.prazo || '9999'));
+        }
+        if (state.etapaTarefaOrdenacao === 'progress') {
+          return Number(b.progressoOnboarding || 0) - Number(a.progressoOnboarding || 0);
+        }
+
+        const prioridade = {
+          'Em andamento': 1,
+          'Pendente': 2,
+          'Concluída': 3,
+          'Onboarding cancelado': 4,
+          'Não aplicável': 5
+        };
+        return Number(prioridade[a.status] || 99) - Number(prioridade[b.status] || 99) ||
+          a.nome.localeCompare(b.nome, 'pt-BR');
+      });
+    }
+
+    function atualizarListaColaboradoresEtapa() {
+      const colaboradores = obterColaboradoresEtapaFiltrados();
+      const container = document.getElementById('taskStageCollaborators');
+
+      renderizarResumoModalEtapa(colaboradores);
+
+      definirTexto(
+        'taskStageCount',
+        pluralizarQuantidade(colaboradores.length, 'colaborador exibido', 'colaboradores exibidos')
+      );
+
+      if (!colaboradores.length) {
+        container.innerHTML =
+          '<div class="task-center-empty-state">' +
+            '<i class="fa-solid fa-user-slash" aria-hidden="true"></i>' +
+            '<strong>Nenhum colaborador encontrado</strong>' +
+            '<p>Altere os filtros para consultar outras pessoas nesta etapa.</p>' +
+          '</div>';
+        return;
+      }
+
+      container.innerHTML = colaboradores.map(criarCardColaboradorEtapa).join('');
+    }
+
+    function criarCardColaboradorEtapa(colaborador) {
+      const progresso = limitarNumero(colaborador.progressoOnboarding, 0, 100);
+      const podeAbrir = Boolean(colaborador.colaboradorRecordId);
+
+      return (
+        '<article class="task-stage-collaborator-card' + (colaborador.atrasada ? ' is-overdue' : '') + '">' +
+          '<div class="task-stage-person">' +
+            '<span class="task-stage-avatar" aria-hidden="true"><i class="fa-solid fa-user"></i></span>' +
+            '<div><strong>' + escaparHtml(colaborador.nome) + '</strong>' +
+            '<span>' + escaparHtml(colaborador.cargo || 'Cargo não informado') + ' · ' + escaparHtml(colaborador.departamento) + '</span></div>' +
+          '</div>' +
+          '<div class="task-stage-status">' +
+            criarBadgeStatus(colaborador.status) +
+            (colaborador.atrasada ? '<span class="overdue-inline-badge"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> Atrasada</span>' : '') +
+            (colaborador.processoCancelado && colaborador.status !== 'Onboarding cancelado'
+              ? '<span class="task-process-cancelled"><i class="fa-solid fa-ban" aria-hidden="true"></i> Processo cancelado</span>'
+              : '') +
+          '</div>' +
+          '<div class="task-stage-deadline"><small>Prazo</small><strong>' + formatarData(colaborador.prazo) + '</strong></div>' +
+          '<div class="task-stage-overall-progress">' +
+            '<div class="progress-label"><span>Onboarding</span><strong>' + progresso + '%</strong></div>' +
+            '<div class="progress-track"><div class="progress-bar" style="width:' + progresso + '%"></div></div>' +
+          '</div>' +
+          '<button type="button" class="button button-secondary button-compact" data-open-task-collaborator="' + escaparAtributo(colaborador.colaboradorRecordId) + '"' +
+            (podeAbrir ? '' : ' disabled') + '>' +
+            '<i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i><span>Abrir onboarding</span>' +
+          '</button>' +
+        '</article>'
+      );
+    }
+
+    function fecharModalEtapaTarefa(restaurarFoco) {
+      const modal = document.getElementById('taskStageModal');
+      modal.hidden = true;
+      modal.setAttribute('aria-hidden', 'true');
+
+      if (document.getElementById('onboardingDetailsModal').hidden) {
+        document.body.classList.remove('modal-open');
+        document.body.style.overflow = '';
+      }
+
+      if (restaurarFoco) {
+        restaurarFocoSeguro(state.etapaTarefaUltimoFoco);
+        state.etapaTarefaUltimoFoco = null;
+      }
+    }
+
+    function abrirColaboradorDaEtapa(recordId) {
+      if (!recordId || !state.etapaTarefaGrupoAtual) return;
+
+      state.centralTarefasRetornoGrupo = state.etapaTarefaGrupoAtual.chave;
+      state.detalhesAbaSolicitada = 'tasks';
+      state.detalhesTarefaSolicitada = state.etapaTarefaGrupoAtual.titulo;
+      state.centralTarefasVoltando = false;
+
+      fecharModalEtapaTarefa(false);
+      document.getElementById('returnToTaskStageButton').hidden = false;
+      abrirDetalhesOnboarding(recordId);
+    }
+
+    function voltarParaEtapaTarefa() {
+      const chave = state.centralTarefasRetornoGrupo;
+      if (!chave) return;
+
+      state.centralTarefasVoltando = true;
+      fecharDetalhesOnboarding();
+      state.centralTarefasVoltando = false;
+
+      window.setTimeout(function () {
+        if (state.centralTarefasCarregada) {
+          abrirModalEtapaTarefa(chave, true);
+          return;
+        }
+
+        carregarCentralTarefas(true, function () {
+          abrirModalEtapaTarefa(chave, true);
+        });
+      }, 0);
+    }
+
+
+    /* ===============================================================
+       CENTRAL OPERACIONAL DO ONBOARDING - v0.5.2
+       =============================================================== */
+
+    function inicializarDetalhesOnboarding() {
+      [
+        'recentCollaboratorsBody',
+        'allCollaboratorsBody'
+      ].forEach(function (bodyId) {
+        const body = document.getElementById(bodyId);
+
+        if (!body) {
+          return;
+        }
+
+        body.addEventListener(
+          'click',
+          tratarAberturaDetalhes
+        );
+
+        body.addEventListener(
+          'keydown',
+          function (event) {
+            if (
+              event.key !== 'Enter' &&
+              event.key !== ' '
+            ) {
+              return;
+            }
+
+            const row =
+              event.target.closest(
+                '[data-record-id]'
+              );
+
+            if (!row) {
+              return;
+            }
+
+            event.preventDefault();
+
+            abrirDetalhesOnboarding(
+              row.dataset.recordId
+            );
+          }
+        );
+      });
+
+      document
+        .getElementById('closeDetailsModal')
+        .addEventListener(
+          'click',
+          fecharDetalhesOnboarding
+        );
+
+      document
+        .getElementById('closeDetailsModalFooter')
+        .addEventListener(
+          'click',
+          fecharDetalhesOnboarding
+        );
+
+      document
+        .getElementById('onboardingDetailsModal')
+        .addEventListener(
+          'click',
+          function (event) {
+            if (
+              event.target.id ===
+              'onboardingDetailsModal'
+            ) {
+              fecharDetalhesOnboarding();
+            }
+          }
+        );
+
+      document
+        .querySelectorAll(
+          '[data-details-tab]'
+        )
+        .forEach(function (button) {
+          button.addEventListener(
+            'click',
+            function () {
+              trocarAbaDetalhes(
+                button.dataset.detailsTab,
+                true
+              );
+            }
+          );
+
+          button.addEventListener(
+            'keydown',
+            tratarNavegacaoAbasDetalhes
+          );
+        });
+
+      document
+        .getElementById(
+          'detailsTasksContent'
+        )
+        .addEventListener(
+          'click',
+          tratarAcaoTarefa
+        );
+
+      document
+        .getElementById('detailsTasksContent')
+        .addEventListener('input', tratarFiltroTarefas);
+
+      document
+        .getElementById('detailsTasksContent')
+        .addEventListener('change', tratarFiltroTarefas);
+
+      document
+        .getElementById(
+          'detailsSummaryContent'
+        )
+        .addEventListener(
+          'click',
+          tratarAcaoResumo
+        );
+
+      document
+        .getElementById('detailsHistoryContent')
+        .addEventListener('change', tratarFiltroHistorico);
+
+      document
+        .getElementById('detailsHistoryContent')
+        .addEventListener('click', tratarAcaoFiltroHistorico);
+
+      document
+        .getElementById('detailsModalLoading')
+        .addEventListener('click', function (event) {
+          const retryButton = event.target.closest('[data-retry-details]');
+          if (retryButton && state.detalhesRecordIdAtual) {
+            abrirDetalhesOnboarding(state.detalhesRecordIdAtual, true);
+          }
+        });
+
+      document.addEventListener(
+        'keydown',
+        tratarTecladoGlobalModais
+      );
+    }
+
+    function tratarAberturaDetalhes(event) {
+      const row =
+        event.target.closest(
+          '[data-record-id]'
+        );
+
+      if (!row) {
+        return;
+      }
+
+      state.centralTarefasRetornoGrupo = '';
+      state.detalhesAbaSolicitada = '';
+      state.detalhesTarefaSolicitada = '';
+      document.getElementById('returnToTaskStageButton').hidden = true;
+
+      abrirDetalhesOnboarding(
+        row.dataset.recordId
+      );
+    }
+
+    function abrirDetalhesOnboarding(recordId, reutilizarFoco) {
+      if (!recordId) {
+        mostrarToast(
+          'Não foi possível identificar o colaborador.',
+          'error'
+        );
+        return;
+      }
+
+      const modal = document.getElementById('onboardingDetailsModal');
+      const card = modal.querySelector('.details-modal-card');
+      const detailsLoading = document.getElementById('detailsModalLoading');
+      const detailsContent = document.getElementById('detailsModalContent');
+
+      if (!reutilizarFoco) {
+        state.ultimoFocoModal = document.activeElement;
+      }
+
+      state.detalhesRecordIdAtual = recordId;
+      const requestToken = ++state.detalhesRequestToken;
+      state.tarefaPesquisa = '';
+      state.tarefaStatus = '';
+      state.tarefaArea = '';
+      state.tarefaOrdenacao = 'order';
+      state.historicoCategoria = '';
+      reiniciarEstadoAbasDetalhes();
+
+      if (state.detalhesTimeout) {
+        window.clearTimeout(state.detalhesTimeout);
+      }
+
+      detailsLoading.hidden = false;
+      detailsLoading.innerHTML =
+        '<div class="spinner" aria-hidden="true"><i class="fa-solid fa-spinner fa-spin"></i></div>' +
+        '<strong>Carregando detalhes</strong>' +
+        '<p>Consultando colaborador, tarefas e histórico.</p>';
+
+      detailsContent.hidden = true;
+      detailsContent.setAttribute('aria-busy', 'true');
+      detailsContent.scrollTop = 0;
+
+      definirTexto('detailsCollaboratorName', 'Detalhes do onboarding');
+      definirTexto('detailsCollaboratorSubtitle', 'Consultando o Airtable...');
+
+      const statusBadge = document.getElementById('detailsStatusBadge');
+      statusBadge.className = 'status-badge status-pendente';
+      statusBadge.textContent = 'Carregando';
+
+      card.classList.remove('is-ready', 'is-cancelled', 'has-load-error');
+      card.classList.add('is-loading');
+      card.setAttribute('aria-busy', 'true');
+
+      modal.hidden = false;
+      modal.setAttribute('aria-hidden', 'false');
+      document.body.classList.add('modal-open');
+      document.body.style.overflow = 'hidden';
+
+      trocarAbaDetalhes('summary', false);
+
+      window.requestAnimationFrame(function () {
+        card.focus({ preventScroll: true });
+      });
+
+      state.detalhesTimeout = window.setTimeout(function () {
+        exibirErroCarregamentoDetalhes(
+          recordId,
+          'A consulta está demorando mais do que o esperado. Verifique a conexão e tente novamente.'
+        );
+      }, 25000);
+
+      google.script.run
+        .withSuccessHandler(function (resultado) {
+          if (state.detalhesRequestToken !== requestToken || state.detalhesRecordIdAtual !== recordId || modal.hidden) {
+            return;
+          }
+
+          window.clearTimeout(state.detalhesTimeout);
+          state.detalhesTimeout = null;
+
+          if (!resultado || !resultado.sucesso) {
+            exibirErroCarregamentoDetalhes(
+              recordId,
+              resultado && resultado.mensagem
+                ? resultado.mensagem
+                : 'Não foi possível carregar os detalhes.'
+            );
+            return;
+          }
+
+          state.detalhesAtuais = resultado;
+
+          if (state.detalhesTarefaSolicitada) {
+            state.tarefaPesquisa = state.detalhesTarefaSolicitada.toLocaleLowerCase('pt-BR');
+          }
+
+          renderizarDetalhesOnboarding(resultado);
+
+          if (state.detalhesAbaSolicitada) {
+            trocarAbaDetalhes(state.detalhesAbaSolicitada, false);
+          }
+
+          detailsLoading.hidden = true;
+          detailsContent.hidden = false;
+          detailsContent.setAttribute('aria-busy', 'false');
+          detailsContent.scrollTop = 0;
+          state.detalhesScrollPorAba.summary = 0;
+
+          card.classList.remove('is-loading', 'has-load-error');
+          card.classList.add('is-ready');
+          card.setAttribute('aria-busy', 'false');
+
+          window.requestAnimationFrame(function () {
+            const activeTab = modal.querySelector('.details-tab-button.is-active');
+            if (activeTab) activeTab.focus({ preventScroll: true });
+          });
+        })
+        .withFailureHandler(function (error) {
+          if (state.detalhesRequestToken !== requestToken || state.detalhesRecordIdAtual !== recordId || modal.hidden) {
+            return;
+          }
+
+          window.clearTimeout(state.detalhesTimeout);
+          state.detalhesTimeout = null;
+          exibirErroCarregamentoDetalhes(recordId, extrairMensagemErro(error));
+        })
+        .obterDetalhesOnboarding(recordId);
+    }
+
+    function exibirErroCarregamentoDetalhes(recordId, mensagem) {
+      const modal = document.getElementById('onboardingDetailsModal');
+      const card = modal.querySelector('.details-modal-card');
+      const detailsLoading = document.getElementById('detailsModalLoading');
+      const detailsContent = document.getElementById('detailsModalContent');
+
+      if (state.detalhesRecordIdAtual !== recordId || modal.hidden) {
+        return;
+      }
+
+      if (state.detalhesTimeout) {
+        window.clearTimeout(state.detalhesTimeout);
+        state.detalhesTimeout = null;
+      }
+
+      detailsContent.hidden = true;
+      detailsContent.setAttribute('aria-busy', 'false');
+      card.classList.remove('is-ready');
+      card.classList.add('is-loading', 'has-load-error');
+      card.setAttribute('aria-busy', 'false');
+
+      definirTexto('detailsCollaboratorSubtitle', 'Não foi possível concluir a consulta.');
+      document.getElementById('detailsStatusBadge').textContent = 'Atenção';
+
+      detailsLoading.hidden = false;
+      detailsLoading.innerHTML =
+        '<div class="details-load-error-icon" aria-hidden="true"><i class="fa-solid fa-triangle-exclamation"></i></div>' +
+        '<strong>Falha ao carregar os detalhes</strong>' +
+        '<p>' + escaparHtml(mensagem || 'Tente novamente em alguns instantes.') + '</p>' +
+        '<div class="details-load-error-actions">' +
+          '<button type="button" class="button button-primary" data-retry-details>' +
+            '<i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i><span>Tentar novamente</span>' +
+          '</button>' +
+          '<button type="button" class="button button-secondary" data-close-details-error>' +
+            '<i class="fa-solid fa-xmark" aria-hidden="true"></i><span>Fechar</span>' +
+          '</button>' +
+        '</div>';
+
+      const closeError = detailsLoading.querySelector('[data-close-details-error]');
+      if (closeError) closeError.addEventListener('click', fecharDetalhesOnboarding, { once: true });
+
+      const retryButton = detailsLoading.querySelector('[data-retry-details]');
+      if (retryButton) retryButton.focus({ preventScroll: true });
+    }
+
+    function fecharDetalhesOnboarding() {
+      const modal = document.getElementById('onboardingDetailsModal');
+      const card = modal.querySelector('.details-modal-card');
+
+      if (state.detalhesTimeout) {
+        window.clearTimeout(state.detalhesTimeout);
+        state.detalhesTimeout = null;
+      }
+
+      modal.hidden = true;
+      modal.setAttribute('aria-hidden', 'true');
+      card.classList.remove('is-ready', 'has-load-error', 'is-cancelled');
+      card.classList.add('is-loading');
+      card.setAttribute('aria-busy', 'false');
+
+      document.body.classList.remove('modal-open');
+      document.body.style.overflow = '';
+      state.detalhesAtuais = null;
+      state.detalhesRecordIdAtual = '';
+      state.detalhesRequestToken += 1;
+      reiniciarEstadoAbasDetalhes();
+
+      document.getElementById('returnToTaskStageButton').hidden = true;
+      state.detalhesAbaSolicitada = '';
+      state.detalhesTarefaSolicitada = '';
+
+      if (!state.centralTarefasVoltando) {
+        state.centralTarefasRetornoGrupo = '';
+      }
+
+      restaurarFocoSeguro(state.ultimoFocoModal);
+      state.ultimoFocoModal = null;
+    }
+
+    function reiniciarEstadoAbasDetalhes() {
+      state.detalhesAbaAtual = 'summary';
+      state.detalhesScrollPorAba = {
+        summary: 0,
+        tasks: 0,
+        history: 0
+      };
+      state.detalhesAbasVisitadas = {
+        summary: true,
+        tasks: false,
+        history: false
+      };
+
+      const content = document.getElementById('detailsModalContent');
+      if (content) content.scrollTop = 0;
+    }
+
+    function trocarAbaDetalhes(nome, moverFoco) {
+      const aba = nome || 'summary';
+      const buttons = Array.from(document.querySelectorAll('.details-tab-button'));
+      const content = document.getElementById('detailsModalContent');
+      const abaAtual = state.detalhesAbaAtual || 'summary';
+
+      if (content && state.detalhesAbasVisitadas[abaAtual]) {
+        state.detalhesScrollPorAba[abaAtual] = content.scrollTop;
+      }
+
+      const primeiraVisita = !state.detalhesAbasVisitadas[aba];
+      state.detalhesAbasVisitadas[aba] = true;
+      state.detalhesAbaAtual = aba;
+
+      buttons.forEach(function (button) {
+        const ativo = button.dataset.detailsTab === aba;
+        button.classList.toggle('is-active', ativo);
+        button.setAttribute('aria-selected', String(ativo));
+        button.tabIndex = ativo ? 0 : -1;
+      });
+
+      document.querySelectorAll('.details-tab-panel').forEach(function (panel) {
+        const ativo = panel.id === 'details-tab-' + aba;
+        panel.classList.toggle('is-active', ativo);
+        panel.setAttribute('aria-hidden', String(!ativo));
+      });
+
+      if (content) {
+        const posicao = primeiraVisita
+          ? 0
+          : Number(state.detalhesScrollPorAba[aba] || 0);
+
+        window.requestAnimationFrame(function () {
+          content.scrollTop = posicao;
+        });
+      }
+
+      if (moverFoco) {
+        const ativo = buttons.find(function (button) {
+          return button.dataset.detailsTab === aba;
+        });
+        if (ativo) ativo.focus({ preventScroll: true });
+      }
+    }
+
+    function tratarNavegacaoAbasDetalhes(event) {
+      const teclas = ['ArrowLeft', 'ArrowRight', 'Home', 'End'];
+      if (!teclas.includes(event.key)) return;
+
+      const buttons = Array.from(document.querySelectorAll('.details-tab-button'));
+      const indiceAtual = buttons.indexOf(event.currentTarget);
+      if (indiceAtual < 0) return;
+
+      event.preventDefault();
+      let proximoIndice = indiceAtual;
+
+      if (event.key === 'ArrowRight') proximoIndice = (indiceAtual + 1) % buttons.length;
+      if (event.key === 'ArrowLeft') proximoIndice = (indiceAtual - 1 + buttons.length) % buttons.length;
+      if (event.key === 'Home') proximoIndice = 0;
+      if (event.key === 'End') proximoIndice = buttons.length - 1;
+
+      trocarAbaDetalhes(buttons[proximoIndice].dataset.detailsTab, true);
+    }
+
+    function renderizarDetalhesOnboarding(
+      resultado
+    ) {
+      const colaborador =
+        resultado.colaborador || {};
+
+      const resumo =
+        resultado.resumo || {};
+
+      definirTexto(
+        'detailsCollaboratorName',
+        colaborador.nome ||
+        'Colaborador'
+      );
+
+      definirTexto(
+        'detailsCollaboratorSubtitle',
+        [
+          colaborador.cargo,
+          colaborador.departamento,
+          colaborador.dataAdmissao
+            ? 'Admissão em ' + formatarData(colaborador.dataAdmissao)
+            : ''
+        ]
+          .filter(Boolean)
+          .join(' • ')
+      );
+
+      const statusBadge =
+        document.getElementById(
+          'detailsStatusBadge'
+        );
+
+      statusBadge.className =
+        'status-badge status-' +
+        normalizarClasse(
+          colaborador.status ||
+          'Pendente'
+        );
+
+      statusBadge.textContent =
+        colaborador.status ||
+        'Pendente';
+
+      document.querySelector('.details-modal-card').classList.toggle(
+        'is-cancelled',
+        normalizarClasse(colaborador.status) === 'cancelado'
+      );
+
+      renderizarResumoDetalhes(
+        colaborador,
+        resumo
+      );
+
+      renderizarTarefasDetalhes(
+        resultado.tarefas || [],
+        resumo
+      );
+
+      renderizarHistoricoDetalhes(
+        resultado.historico || []
+      );
+    }
+
+    function renderizarResumoDetalhes(colaborador, resumo) {
+      const percentual = limitarNumero(resumo.percentualCalculado, 0, 100);
+      const precisaSincronizar = Boolean(resumo.progressoDivergente || resumo.statusDivergente);
+      const statusProcesso = normalizarClasse(colaborador.status);
+      const cancelado = statusProcesso === 'cancelado';
+      const concluido = statusProcesso === 'concluido';
+      const mensagensDivergencia = [];
+
+      if (resumo.progressoDivergente) {
+        mensagensDivergencia.push(
+          'O progresso armazenado é ' + limitarNumero(resumo.progressoAtual, 0, 100) +
+          '%, mas o cálculo atual é ' + percentual + '%.'
+        );
+      }
+
+      if (resumo.statusDivergente) {
+        mensagensDivergencia.push(
+          'O status armazenado é "' + String(resumo.statusAtual || '') +
+          '", mas o status calculado é "' + String(resumo.statusSugerido || '') + '".'
+        );
+      }
+
+      document.getElementById('detailsSummaryContent').innerHTML =
+        (cancelado
+          ? '<div class="cancelled-process-banner"><div><strong>Onboarding cancelado</strong>' +
+              '<p>As tarefas estão bloqueadas, mas o histórico e os dados foram preservados.</p></div>' +
+              '<button type="button" class="button button-primary button-compact" data-onboarding-action="reativar"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i><span>Reativar processo</span></button></div>'
+          : '') +
+
+        (!cancelado
+          ? '<div class="details-action-bar details-action-bar-compact">' +
+              '<div class="details-action-context"><i class="fa-solid fa-sliders" aria-hidden="true"></i><span>Ações do processo</span></div>' +
+              '<div class="details-action-buttons">' +
+                (concluido
+                  ? '<button type="button" class="button button-secondary button-compact" data-onboarding-action="reabrir"><i class="fa-solid fa-arrow-rotate-left" aria-hidden="true"></i><span>Reabrir onboarding</span></button>'
+                  : '<button type="button" class="button button-danger button-compact" data-onboarding-action="cancelar"><i class="fa-solid fa-ban" aria-hidden="true"></i><span>Cancelar onboarding</span></button>') +
+              '</div>' +
+            '</div>'
+          : '') +
+
+        '<div class="details-summary-grid">' +
+          criarCardResumoDetalhes('Tarefas ativas', resumo.ativas || 0, 'Itens considerados no progresso') +
+          criarCardResumoDetalhes('Concluídas', resumo.concluidas || 0, 'Etapas finalizadas') +
+          criarCardResumoDetalhes('Em andamento', resumo.emAndamento || 0, 'Etapas sendo executadas') +
+          criarCardResumoDetalhes('Pendentes', resumo.pendentes || 0, 'Aguardando execução') +
+          criarCardResumoDetalhes('Atrasadas', resumo.atrasadas || 0, 'Prazos já vencidos') +
+          criarCardResumoDetalhes('Obrigatórias', resumo.obrigatorias || 0, 'Etapas essenciais do processo') +
+        '</div>' +
+
+        '<section class="details-progress-panel">' +
+          '<div class="details-progress-heading"><div><h3>Progresso calculado</h3><p>' +
+            String(resumo.concluidas || 0) + ' de ' + String(resumo.ativas || 0) +
+            ' tarefas ativas concluídas</p></div><div class="details-progress-value">' + percentual + '%</div></div>' +
+          '<div class="details-progress-track"><div class="details-progress-bar" style="width:' + percentual + '%"></div></div>' +
+          '<p class="details-progress-help"><i class="fa-solid fa-circle-info" aria-hidden="true"></i><span>O progresso considera apenas tarefas concluídas. Tarefas em andamento não alteram o percentual.</span></p>' +
+          (precisaSincronizar && !cancelado
+            ? '<div class="details-warning details-warning-action"><div><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i><span>' +
+                mensagensDivergencia.map(escaparHtml).join('<br>') +
+              '</span></div><button type="button" class="button button-secondary button-compact" data-sync-onboarding><i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i><span>Sincronizar agora</span></button></div>'
+            : '') +
+        '</section>' +
+
+        '<div class="details-info-grid">' +
+          criarInfoDetalhes('Data de admissão', formatarData(colaborador.dataAdmissao)) +
+          criarInfoDetalhes('Líder responsável', colaborador.liderResponsavel || '-') +
+          criarInfoDetalhes('E-mail do líder', colaborador.emailLider || '-') +
+          criarInfoDetalhes('Modalidade', colaborador.modalidade || '-') +
+          criarInfoDetalhes('Tipo de vínculo', colaborador.tipoVinculo || '-') +
+          criarInfoDetalhes('E-mail do colaborador', colaborador.email || '-') +
+          criarInfoDetalhes('Evento no Agenda', colaborador.eventoCriado ? 'Criado' : 'Pendente') +
+          criarInfoDetalhes('E-mail de boas-vindas', colaborador.emailEnviado ? 'Enviado' : 'Pendente') +
+          criarInfoDetalhes('Status calculado', resumo.statusSugerido || '-') +
+        '</div>' +
+
+        (colaborador.observacoes
+          ? '<section class="details-notes"><span>Observações</span><p>' +
+              escaparHtml(colaborador.observacoes) +
+            '</p></section>'
+          : '');
+    }
+    function obterIconeResumoDetalhes(rotulo) {
+      const mapa = {
+        'Tarefas ativas': 'fa-list-check',
+        'Concluídas': 'fa-circle-check',
+        'Em andamento': 'fa-circle-play',
+        'Pendentes': 'fa-clock',
+        'Atrasadas': 'fa-triangle-exclamation',
+        'Obrigatórias': 'fa-shield-halved'
+      };
+      return mapa[rotulo] || 'fa-circle-info';
+    }
+
+    function criarCardResumoDetalhes(
+      rotulo,
+      valor,
+      descricao
+    ) {
+      return (
+        '<article class="details-summary-card summary-' + normalizarClasse(rotulo) + '">' +
+          '<div class="details-summary-card-topline"><span>' +
+            escaparHtml(rotulo) +
+          '</span><i class="fa-solid ' + obterIconeResumoDetalhes(rotulo) + '" aria-hidden="true"></i></div>' +
+          '<strong>' +
+            escaparHtml(String(valor)) +
+          '</strong>' +
+          '<small>' +
+            escaparHtml(descricao) +
+          '</small>' +
+        '</article>'
+      );
+    }
+
+    function criarInfoDetalhes(
+      rotulo,
+      valor
+    ) {
+      return (
+        '<div class="details-info-item">' +
+          '<span>' +
+            escaparHtml(rotulo) +
+          '</span>' +
+          '<strong>' +
+            escaparHtml(String(valor)) +
+          '</strong>' +
+        '</div>'
+      );
+    }
+
+    function renderizarTarefasDetalhes(tarefas, resumo) {
+      const container = document.getElementById('detailsTasksContent');
+      const areas = Array.from(new Set(tarefas.map(function (tarefa) {
+        return tarefa.areaResponsavel;
+      }).filter(Boolean))).sort(function (a, b) { return a.localeCompare(b, 'pt-BR'); });
+
+      if (!tarefas.length) {
+        container.innerHTML = '<div class="details-empty-state">Nenhuma tarefa foi encontrada para este onboarding.</div>';
+        return;
+      }
+
+      container.innerHTML =
+        '<div class="details-section-heading"><div><h3>Checklist do onboarding</h3>' +
+          '<p>' + String(resumo.concluidas || 0) + ' concluídas, ' +
+          String(resumo.emAndamento || 0) + ' em andamento, ' +
+          String(resumo.pendentes || 0) + ' pendentes e ' +
+          String(resumo.atrasadas || 0) + ' atrasadas.</p></div>' +
+          '<span class="details-management-note">Atualize cada etapa pelo botão de ação.</span></div>' +
+
+        '<div class="task-filter-toolbar">' +
+          '<div class="task-search-field"><label for="taskSearch">Pesquisar tarefa</label>' +
+            '<div class="search-input-shell"><span class="search-input-icon" aria-hidden="true"><i class="fa-solid fa-magnifying-glass"></i></span>' +
+            '<input id="taskSearch" type="search" data-task-search placeholder="Título, categoria ou área" value="' +
+            escaparAtributo(state.tarefaPesquisa) + '"></div></div>' +
+          '<div class="filter-group"><label for="taskStatusFilter">Status</label><select id="taskStatusFilter" data-task-status>' +
+            criarOpcoesSelect(['Pendente', 'Em andamento', 'Concluída', 'Atrasada'], 'Todos', state.tarefaStatus) +
+          '</select></div>' +
+          '<div class="filter-group"><label for="taskAreaFilter">Área</label><select id="taskAreaFilter" data-task-area>' +
+            criarOpcoesSelect(areas, 'Todas', state.tarefaArea) +
+          '</select></div>' +
+          '<div class="filter-group"><label for="taskSort">Ordenar</label><select id="taskSort" data-task-sort>' +
+            '<option value="order">Ordem do checklist</option>' +
+            '<option value="deadline">Prazo mais próximo</option>' +
+            '<option value="status">Status</option>' +
+            '<option value="area">Área responsável</option>' +
+          '</select></div>' +
+        '</div>' +
+        '<div id="detailsTaskFilterResult" class="task-filter-result"></div>' +
+        '<div id="detailsTaskList" class="details-task-list"></div>';
+
+      document.getElementById('taskSort').value = state.tarefaOrdenacao;
+      atualizarListaTarefasDetalhes(tarefas);
+    }
+    function criarOpcoesSelect(opcoes, rotuloPadrao, selecionado) {
+      return '<option value="">' + escaparHtml(rotuloPadrao) + '</option>' +
+        opcoes.map(function (opcao) {
+          return '<option value="' + escaparAtributo(opcao) + '"' +
+            (opcao === selecionado ? ' selected' : '') + '>' +
+            escaparHtml(opcao) + '</option>';
+        }).join('');
+    }
+
+    function tratarFiltroTarefas(event) {
+      if (event.target.matches('[data-task-search]')) {
+        state.tarefaPesquisa = event.target.value.trim().toLocaleLowerCase('pt-BR');
+      } else if (event.target.matches('[data-task-status]')) {
+        state.tarefaStatus = event.target.value;
+      } else if (event.target.matches('[data-task-area]')) {
+        state.tarefaArea = event.target.value;
+      } else if (event.target.matches('[data-task-sort]')) {
+        state.tarefaOrdenacao = event.target.value || 'order';
+      } else {
+        return;
+      }
+
+      atualizarListaTarefasDetalhes(
+        state.detalhesAtuais && Array.isArray(state.detalhesAtuais.tarefas)
+          ? state.detalhesAtuais.tarefas
+          : []
+      );
+    }
+
+    function atualizarListaTarefasDetalhes(tarefas) {
+      const termo = state.tarefaPesquisa;
+      const filtradas = tarefas.filter(function (tarefa) {
+        const statusFiltro = state.tarefaStatus;
+        const correspondeStatus = !statusFiltro ||
+          (statusFiltro === 'Atrasada' ? tarefa.atrasada : tarefa.status === statusFiltro);
+        const correspondeArea = !state.tarefaArea || tarefa.areaResponsavel === state.tarefaArea;
+        const correspondePesquisa = !termo || [
+          tarefa.titulo,
+          tarefa.categoria,
+          tarefa.areaResponsavel,
+          tarefa.responsavel
+        ].join(' ').toLocaleLowerCase('pt-BR').includes(termo);
+
+        return correspondeStatus && correspondeArea && correspondePesquisa;
+      });
+
+      filtradas.sort(function (a, b) {
+        if (state.tarefaOrdenacao === 'deadline') {
+          return String(a.prazo || '9999').localeCompare(String(b.prazo || '9999'));
+        }
+        if (state.tarefaOrdenacao === 'status') {
+          return String(a.status).localeCompare(String(b.status), 'pt-BR');
+        }
+        if (state.tarefaOrdenacao === 'area') {
+          return String(a.areaResponsavel).localeCompare(String(b.areaResponsavel), 'pt-BR');
+        }
+        return Number(a.ordem || 999999) - Number(b.ordem || 999999);
+      });
+
+      const result = document.getElementById('detailsTaskFilterResult');
+      const list = document.getElementById('detailsTaskList');
+      if (!result || !list) return;
+
+      result.textContent = filtradas.length === 1
+        ? '1 tarefa exibida'
+        : filtradas.length + ' tarefas exibidas';
+
+      list.innerHTML = filtradas.length
+        ? filtradas.map(criarItemTarefaDetalhes).join('')
+        : '<div class="details-empty-state">Nenhuma tarefa corresponde aos filtros selecionados.</div>';
+    }
+
+    function criarItemTarefaDetalhes(
+      tarefa
+    ) {
+      const processoCancelado = Boolean(
+        state.detalhesAtuais &&
+        state.detalhesAtuais.colaborador &&
+        normalizarClasse(state.detalhesAtuais.colaborador.status) === 'cancelado'
+      );
+
+      const acao = processoCancelado
+        ? null
+        : obterAcaoTarefa(tarefa);
+
+      return (
+        '<article class="details-task-item ' +
+          (
+            tarefa.atrasada
+              ? 'is-overdue'
+              : ''
+          ) +
+        '">' +
+          '<div class="details-task-title">' +
+            '<strong>' +
+              escaparHtml(
+                tarefa.titulo ||
+                'Tarefa sem título'
+              ) +
+            '</strong>' +
+            '<span>' +
+              escaparHtml(
+                tarefa.categoria ||
+                tarefa.idTarefa ||
+                'Sem categoria'
+              ) +
+            '</span>' +
+          '</div>' +
+
+          '<div class="details-task-meta">' +
+            '<strong>' +
+              escaparHtml(
+                tarefa.areaResponsavel ||
+                'Área não informada'
+              ) +
+            '</strong>' +
+            '<span>Área responsável</span>' +
+          '</div>' +
+
+          '<div class="details-task-meta">' +
+            '<strong>' +
+              formatarData(tarefa.prazo) +
+            '</strong>' +
+            '<span>Prazo</span>' +
+          '</div>' +
+
+          '<div class="details-task-badges">' +
+            '<span class="status-badge status-' +
+              normalizarClasse(
+                tarefa.status ||
+                'Pendente'
+              ) +
+            '">' +
+              escaparHtml(
+                tarefa.status ||
+                'Pendente'
+              ) +
+            '</span>' +
+            '<span class="details-mini-badge ' +
+              (
+                tarefa.obrigatoria
+                  ? 'is-required'
+                  : 'is-optional'
+              ) +
+            '">' +
+              (
+                tarefa.obrigatoria
+                  ? 'Obrigatória'
+                  : 'Opcional'
+              ) +
+            '</span>' +
+            (
+              tarefa.atrasada
+                ? '<span class="details-mini-badge is-overdue">' +
+                    'Atrasada' +
+                  '</span>'
+                : ''
+            ) +
+          '</div>' +
+
+          '<div class="details-task-action">' +
+            (
+              acao
+                ? '<button ' +
+                    'type="button" ' +
+                    'class="task-action-button ' +
+                      acao.classe +
+                    '" ' +
+                    'data-task-action="' +
+                      acao.codigo +
+                    '" ' +
+                    'data-task-id="' +
+                      escaparAtributo(
+                        tarefa.recordId
+                      ) +
+                    '"' +
+                  '>' +
+                    '<i class="fa-solid ' + escaparAtributo(acao.icone || 'fa-circle') + '" aria-hidden="true"></i>' +
+                    '<span>' + escaparHtml(
+                      acao.rotulo
+                    ) + '</span>' +
+                  '</button>'
+                : '<span class="details-task-no-action">' + (processoCancelado ? 'Processo cancelado' : 'Sem ação') + '</span>'
+            ) +
+          '</div>' +
+        '</article>'
+      );
+    }
+
+    function obterAcaoTarefa(tarefa) {
+      const status =
+        normalizarClasse(
+          tarefa.status ||
+          'Pendente'
+        );
+
+      if (
+        status === 'pendente' ||
+        status === 'atrasada'
+      ) {
+        return {
+          codigo: 'iniciar',
+          rotulo: 'Iniciar',
+          novoStatus: 'Em andamento',
+          classe: 'is-start',
+          icone: 'fa-play'
+        };
+      }
+
+      if (status === 'em-andamento') {
+        return {
+          codigo: 'concluir',
+          rotulo: 'Concluir',
+          novoStatus: 'Concluída',
+          classe: 'is-complete',
+          icone: 'fa-check'
+        };
+      }
+
+      if (
+        status === 'concluida' ||
+        status === 'concluido'
+      ) {
+        return {
+          codigo: 'reabrir',
+          rotulo: 'Reabrir',
+          novoStatus: 'Pendente',
+          classe: 'is-reopen',
+          icone: 'fa-rotate-left'
+        };
+      }
+
+      return null;
+    }
+
+    function tratarAcaoTarefa(event) {
+      const button =
+        event.target.closest(
+          '[data-task-action]'
+        );
+
+      if (
+        !button ||
+        state.acaoTarefaEmAndamento
+      ) {
+        return;
+      }
+
+      const tarefa =
+        (
+          state.detalhesAtuais &&
+          Array.isArray(
+            state.detalhesAtuais.tarefas
+          )
+        )
+          ? state.detalhesAtuais.tarefas.find(
+              function (item) {
+                return (
+                  item.recordId ===
+                  button.dataset.taskId
+                );
+              }
+            )
+          : null;
+
+      if (!tarefa) {
+        mostrarToast(
+          'A tarefa selecionada não foi localizada.',
+          'error'
+        );
+        return;
+      }
+
+      const acao =
+        obterAcaoTarefa(tarefa);
+
+      if (!acao) {
+        mostrarToast(
+          'Esta tarefa não possui uma ação disponível.',
+          'error'
+        );
+        return;
+      }
+
+      executarAcaoTarefa(
+        button,
+        tarefa,
+        acao
+      );
+    }
+
+    function executarAcaoTarefa(
+      button,
+      tarefa,
+      acao
+    ) {
+      state.acaoTarefaEmAndamento = true;
+
+      const conteudoOriginal =
+        button.innerHTML;
+
+      button.disabled = true;
+      button.classList.add('is-loading');
+      definirConteudoBotao(button, 'fa-spinner fa-spin', 'Salvando...');
+
+      google.script.run
+        .withSuccessHandler(
+          function (resultado) {
+            state.acaoTarefaEmAndamento = false;
+
+            if (
+              !resultado ||
+              !resultado.sucesso
+            ) {
+              button.disabled = false;
+              button.classList.remove(
+                'is-loading'
+              );
+              button.innerHTML =
+                conteudoOriginal;
+
+              mostrarToast(
+                resultado &&
+                resultado.mensagem
+                  ? resultado.mensagem
+                  : 'Não foi possível atualizar a tarefa.',
+                'error'
+              );
+              return;
+            }
+
+            state.detalhesAtuais =
+              resultado;
+            state.centralTarefasCarregada = false;
+
+            renderizarDetalhesOnboarding(
+              resultado
+            );
+
+            trocarAbaDetalhes('tasks');
+            carregarDadosIniciais(false);
+
+            mostrarToast(
+              resultado.mensagem ||
+              'Tarefa atualizada com sucesso.',
+              'success'
+            );
+          }
+        )
+        .withFailureHandler(
+          function (error) {
+            state.acaoTarefaEmAndamento = false;
+
+            button.disabled = false;
+            button.classList.remove(
+              'is-loading'
+            );
+            button.innerHTML =
+              conteudoOriginal;
+
+            mostrarToast(
+              extrairMensagemErro(error),
+              'error'
+            );
+          }
+        )
+        .atualizarStatusTarefa(
+          tarefa.recordId,
+          acao.novoStatus
+        );
+    }
+
+    function tratarAcaoResumo(event) {
+      const syncButton = event.target.closest('[data-sync-onboarding]');
+      if (syncButton) {
+        sincronizarOnboardingAtual(syncButton);
+        return;
+      }
+
+      const actionButton = event.target.closest('[data-onboarding-action]');
+      if (actionButton) {
+        solicitarAlteracaoOnboarding(actionButton.dataset.onboardingAction);
+      }
+    }
+    function solicitarAlteracaoOnboarding(acao) {
+      const colaborador = state.detalhesAtuais && state.detalhesAtuais.colaborador
+        ? state.detalhesAtuais.colaborador
+        : null;
+
+      if (!colaborador || !colaborador.recordId || state.acaoOnboardingEmAndamento) {
+        mostrarToast('Não foi possível identificar o onboarding.', 'error');
+        return;
+      }
+
+      const cancelar = acao === 'cancelar';
+      const reabrir = acao === 'reabrir';
+
+      abrirConfirmacao({
+        titulo: cancelar
+          ? 'Cancelar onboarding?'
+          : reabrir
+            ? 'Reabrir onboarding?'
+            : 'Reativar onboarding?',
+        mensagem: cancelar
+          ? 'O processo será bloqueado sem excluir tarefas, histórico, evento ou e-mails. Essa ação poderá ser revertida.'
+          : reabrir
+            ? 'A última etapa concluída será reaberta e o status e o progresso serão recalculados.'
+            : 'O status e o progresso serão recalculados com base nas tarefas atuais.',
+        confirmar: cancelar
+          ? 'Cancelar processo'
+          : reabrir
+            ? 'Reabrir processo'
+            : 'Reativar processo',
+        perigosa: cancelar,
+        acao: function () {
+          executarAlteracaoOnboarding(colaborador.recordId, acao);
+        }
+      });
+    }
+
+    function executarAlteracaoOnboarding(recordId, acao) {
+      state.acaoOnboardingEmAndamento = true;
+      definirCarregamento(
+        true,
+        acao === 'cancelar'
+          ? 'Cancelando onboarding'
+          : acao === 'reabrir'
+            ? 'Reabrindo onboarding'
+            : 'Reativando onboarding',
+        'Atualizando o Airtable e registrando a ação no histórico.'
+      );
+
+      google.script.run
+        .withSuccessHandler(function (resultado) {
+          state.acaoOnboardingEmAndamento = false;
+          definirCarregamento(false);
+
+          if (!resultado || !resultado.sucesso) {
+            mostrarToast(
+              resultado && resultado.mensagem
+                ? resultado.mensagem
+                : 'Não foi possível alterar o onboarding.',
+              'error'
+            );
+            return;
+          }
+
+          state.detalhesAtuais = resultado;
+          state.centralTarefasCarregada = false;
+          renderizarDetalhesOnboarding(resultado);
+          trocarAbaDetalhes('summary');
+          carregarDadosIniciais(false);
+          mostrarToast(resultado.mensagem || 'Onboarding atualizado.', 'success');
+        })
+        .withFailureHandler(function (error) {
+          state.acaoOnboardingEmAndamento = false;
+          definirCarregamento(false);
+          mostrarToast(extrairMensagemErro(error), 'error');
+        })
+        .alterarSituacaoOnboarding(recordId, acao);
+    }
+
+    function abrirConfirmacao(configuracao) {
+      state.confirmacaoPendente = configuracao && configuracao.acao
+        ? configuracao.acao
+        : null;
+
+      definirTexto('confirmationModalTitle', configuracao.titulo || 'Confirmar ação');
+      definirTexto('confirmationModalMessage', configuracao.mensagem || 'Revise a ação antes de continuar.');
+
+      const cancelButton = document.getElementById('confirmationCancelButton');
+      cancelButton.innerHTML =
+        '<i class="fa-solid fa-arrow-left" aria-hidden="true"></i>' +
+        '<span>' + escaparHtml(configuracao.cancelar || 'Voltar') + '</span>';
+
+      const confirmButton = document.getElementById('confirmationConfirmButton');
+      confirmButton.innerHTML =
+        '<i class="fa-solid ' + (configuracao.perigosa ? 'fa-ban' : 'fa-check') + '" aria-hidden="true"></i>' +
+        '<span>' + escaparHtml(configuracao.confirmar || 'Confirmar') + '</span>';
+      confirmButton.className = 'button ' + (configuracao.perigosa ? 'button-danger' : 'button-primary');
+
+      const confirmationIcon = document.getElementById('confirmationModalIcon');
+      confirmationIcon.className =
+        'confirmation-icon ' + (configuracao.perigosa ? 'is-danger' : 'is-positive');
+      confirmationIcon.innerHTML =
+        '<i class="fa-solid ' + (configuracao.perigosa ? 'fa-triangle-exclamation' : 'fa-circle-check') + '" aria-hidden="true"></i>';
+
+      state.focoAnteriorConfirmacao = document.activeElement;
+
+      const confirmationModal = document.getElementById('confirmationModal');
+      confirmationModal.hidden = false;
+      confirmationModal.setAttribute('aria-hidden', 'false');
+      document.body.classList.add('confirmation-modal-open');
+
+      window.requestAnimationFrame(function () {
+        confirmButton.focus();
+      });
+    }
+
+    function fecharConfirmacao() {
+      const confirmationModal = document.getElementById('confirmationModal');
+      confirmationModal.hidden = true;
+      confirmationModal.setAttribute('aria-hidden', 'true');
+      document.body.classList.remove('confirmation-modal-open');
+      state.confirmacaoPendente = null;
+      restaurarFocoSeguro(state.focoAnteriorConfirmacao);
+      state.focoAnteriorConfirmacao = null;
+    }
+
+    function executarConfirmacaoPendente() {
+      const acao = state.confirmacaoPendente;
+      fecharConfirmacao();
+      if (typeof acao === 'function') acao();
+    }
+
+    function sincronizarOnboardingAtual(
+      button
+    ) {
+      const detalhes =
+        state.detalhesAtuais || {};
+
+      const colaborador =
+        detalhes.colaborador || {};
+
+      if (!colaborador.recordId) {
+        mostrarToast(
+          'Não foi possível identificar o onboarding.',
+          'error'
+        );
+        return;
+      }
+
+      const conteudoOriginal = button.innerHTML;
+      button.disabled = true;
+      definirConteudoBotao(button, 'fa-spinner fa-spin', 'Sincronizando...');
+
+      google.script.run
+        .withSuccessHandler(
+          function (resultado) {
+            if (
+              !resultado ||
+              !resultado.sucesso
+            ) {
+              button.disabled = false;
+              button.innerHTML =
+                conteudoOriginal;
+
+              mostrarToast(
+                resultado &&
+                resultado.mensagem
+                  ? resultado.mensagem
+                  : 'Não foi possível sincronizar o onboarding.',
+                'error'
+              );
+              return;
+            }
+
+            state.detalhesAtuais =
+              resultado;
+
+            renderizarDetalhesOnboarding(
+              resultado
+            );
+
+            trocarAbaDetalhes('summary');
+            carregarDadosIniciais(false);
+
+            mostrarToast(
+              resultado.mensagem ||
+              'Onboarding sincronizado.',
+              'success'
+            );
+          }
+        )
+        .withFailureHandler(
+          function (error) {
+            button.disabled = false;
+            button.innerHTML =
+              conteudoOriginal;
+
+            mostrarToast(
+              extrairMensagemErro(error),
+              'error'
+            );
+          }
+        )
+        .sincronizarOnboarding(
+          colaborador.recordId
+        );
+    }
+
+    function resumirIdentificadorOnboarding(
+      valor
+    ) {
+      const texto =
+        String(valor || '').trim();
+
+      if (!texto) {
+        return '';
+      }
+
+      if (texto.length <= 20) {
+        return texto;
+      }
+
+      return (
+        texto.substring(0, 12) +
+        '…' +
+        texto.substring(
+          texto.length - 4
+        )
+      );
+    }
+
+    function classificarEventoHistorico(item) {
+      const texto = [item.acao, item.tipo, item.mensagem]
+        .filter(Boolean)
+        .join(' ')
+        .toLocaleLowerCase('pt-BR');
+
+      if (texto.includes('cancel')) return { categoria: 'interrupcao', classe: 'is-cancelled', icone: 'fa-ban', rotulo: 'Interrupção' };
+      if (texto.includes('reativ')) return { categoria: 'reativacao', classe: 'is-reactivated', icone: 'fa-rotate-left', rotulo: 'Reativação' };
+      if (texto.includes('reabert')) return { categoria: 'reabertura', classe: 'is-reopened', icone: 'fa-arrow-rotate-left', rotulo: 'Reabertura' };
+      if (texto.includes('conclu')) return { categoria: 'conclusao', classe: 'is-completed', icone: 'fa-check', rotulo: 'Conclusão' };
+      if (texto.includes('iniciad') || texto.includes('andamento')) return { categoria: 'execucao', classe: 'is-progress', icone: 'fa-play', rotulo: 'Execução' };
+      if (texto.includes('email') || texto.includes('e-mail')) return { categoria: 'comunicacao', classe: 'is-email', icone: 'fa-envelope', rotulo: 'Comunicação' };
+      if (texto.includes('agenda') || texto.includes('evento')) return { categoria: 'agenda', classe: 'is-calendar', icone: 'fa-calendar-check', rotulo: 'Agenda' };
+      if (texto.includes('sincron')) return { categoria: 'sincronizacao', classe: 'is-sync', icone: 'fa-arrows-rotate', rotulo: 'Sincronização' };
+      if (texto.includes('criad')) return { categoria: 'criacao', classe: 'is-created', icone: 'fa-plus', rotulo: 'Criação' };
+      return { categoria: 'registro', classe: 'is-generic', icone: 'fa-circle-info', rotulo: 'Registro' };
+    }
+
+    function renderizarHistoricoDetalhes(historico) {
+      const container = document.getElementById('detailsHistoryContent');
+      const eventos = Array.isArray(historico) ? historico : [];
+
+      if (!eventos.length) {
+        container.innerHTML =
+          '<div class="details-section-heading"><div><h3>Linha do tempo</h3>' +
+            '<p>0 eventos registrados para este onboarding.</p></div></div>' +
+          '<div class="details-empty-state">Nenhum registro de histórico foi encontrado.</div>';
+        return;
+      }
+
+      const categoriasMap = {};
+      eventos.forEach(function (item) {
+        const visual = classificarEventoHistorico(item);
+        categoriasMap[visual.categoria] = visual.rotulo;
+      });
+
+      const ordemCategorias = [
+        'criacao', 'agenda', 'comunicacao', 'execucao', 'conclusao',
+        'reabertura', 'sincronizacao', 'interrupcao', 'reativacao', 'registro'
+      ];
+
+      const categorias = ordemCategorias
+        .filter(function (chave) { return categoriasMap[chave]; })
+        .map(function (chave) { return { chave: chave, rotulo: categoriasMap[chave] }; });
+
+      container.innerHTML =
+        '<div class="details-section-heading details-history-heading">' +
+          '<div><h3>Linha do tempo</h3>' +
+            '<p id="detailsHistoryCount">' + pluralizarQuantidade(eventos.length, 'evento registrado', 'eventos registrados') + '.</p></div>' +
+        '</div>' +
+        '<div class="history-filter-toolbar">' +
+          '<div class="filter-group"><label for="historyCategoryFilter">Categoria</label>' +
+            '<select id="historyCategoryFilter" data-history-category>' +
+              '<option value="">Todas as categorias</option>' +
+              categorias.map(function (categoria) {
+                return '<option value="' + escaparAtributo(categoria.chave) + '"' +
+                  (categoria.chave === state.historicoCategoria ? ' selected' : '') + '>' +
+                  escaparHtml(categoria.rotulo) + '</option>';
+              }).join('') +
+            '</select></div>' +
+          '<button type="button" class="button button-secondary button-compact" data-clear-history-filter' +
+            (state.historicoCategoria ? '' : ' hidden') + '>' +
+            '<i class="fa-solid fa-filter-circle-xmark" aria-hidden="true"></i><span>Limpar filtro</span></button>' +
+        '</div>' +
+        '<div id="detailsHistoryList" class="details-history-list"></div>';
+
+      atualizarListaHistoricoDetalhes(eventos);
+    }
+
+    function tratarFiltroHistorico(event) {
+      if (!event.target.matches('[data-history-category]')) return;
+      state.historicoCategoria = event.target.value || '';
+      atualizarListaHistoricoDetalhes(
+        state.detalhesAtuais && Array.isArray(state.detalhesAtuais.historico)
+          ? state.detalhesAtuais.historico
+          : []
+      );
+    }
+
+    function tratarAcaoFiltroHistorico(event) {
+      const button = event.target.closest('[data-clear-history-filter]');
+      if (!button) return;
+
+      state.historicoCategoria = '';
+      const select = document.querySelector('[data-history-category]');
+      if (select) select.value = '';
+      atualizarListaHistoricoDetalhes(
+        state.detalhesAtuais && Array.isArray(state.detalhesAtuais.historico)
+          ? state.detalhesAtuais.historico
+          : []
+      );
+    }
+
+    function atualizarListaHistoricoDetalhes(historico) {
+      const eventos = Array.isArray(historico) ? historico : [];
+      const filtrados = eventos.filter(function (item) {
+        return !state.historicoCategoria ||
+          classificarEventoHistorico(item).categoria === state.historicoCategoria;
+      });
+
+      const count = document.getElementById('detailsHistoryCount');
+      const list = document.getElementById('detailsHistoryList');
+      const clearButton = document.querySelector('[data-clear-history-filter]');
+
+      if (count) {
+        count.textContent = state.historicoCategoria
+          ? filtrados.length + ' de ' + eventos.length + ' eventos exibidos.'
+          : pluralizarQuantidade(eventos.length, 'evento registrado', 'eventos registrados') + '.';
+      }
+
+      if (clearButton) clearButton.hidden = !state.historicoCategoria;
+      if (!list) return;
+
+      if (!filtrados.length) {
+        list.innerHTML =
+          '<div class="details-empty-state history-empty-state">' +
+            '<i class="fa-solid fa-filter-circle-xmark" aria-hidden="true"></i>' +
+            '<strong>Nenhum evento nesta categoria</strong>' +
+            '<p>Limpe o filtro para visualizar todo o histórico do onboarding.</p>' +
+            '<button type="button" class="button button-secondary button-compact" data-clear-history-filter>' +
+              '<i class="fa-solid fa-filter-circle-xmark" aria-hidden="true"></i><span>Limpar filtro</span>' +
+            '</button>' +
+          '</div>';
+        return;
+      }
+
+      list.innerHTML = filtrados.map(function (item) {
+        const visual = classificarEventoHistorico(item);
+        return (
+          '<article class="details-history-item ' + visual.classe + '">' +
+            '<div class="details-history-dot" aria-hidden="true"><i class="fa-solid ' + escaparAtributo(visual.icone) + '"></i></div>' +
+            '<div class="details-history-content">' +
+              '<div class="details-history-header"><strong>' +
+                escaparHtml(item.acao || item.tipo || 'Evento registrado') +
+              '</strong><span>' + escaparHtml(visual.rotulo) + '</span></div>' +
+              (item.mensagem ? '<p>' + escaparHtml(item.mensagem) + '</p>' : '') +
+              '<time>' + formatarDataHoraDetalhes(item.dataHora || item.criadoEm) + '</time>' +
+            '</div>' +
+          '</article>'
+        );
+      }).join('');
+    }
+
+    function formatarDataHoraDetalhes(
+      valor
+    ) {
+      if (!valor) {
+        return 'Data não informada';
+      }
+
+      const data = new Date(valor);
+
+      if (
+        Number.isNaN(
+          data.getTime()
+        )
+      ) {
+        return String(valor);
+      }
+
+      return data.toLocaleString(
+        'pt-BR',
+        {
+          dateStyle: 'short',
+          timeStyle: 'short'
+        }
+      );
+    }
+    function obterModalSuperiorAberto() {
+      const confirmation = document.getElementById('confirmationModal');
+      if (confirmation && !confirmation.hidden) return confirmation;
+
+      const result = document.getElementById('resultModal');
+      if (result && !result.hidden) return result;
+
+      const details = document.getElementById('onboardingDetailsModal');
+      if (details && !details.hidden) return details;
+
+      const taskStage = document.getElementById('taskStageModal');
+      if (taskStage && !taskStage.hidden) return taskStage;
+
+      return null;
+    }
+
+    function tratarTecladoGlobalModais(event) {
+      const modal = obterModalSuperiorAberto();
+      if (!modal) return;
+
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        if (modal.id === 'confirmationModal') fecharConfirmacao();
+        else if (modal.id === 'resultModal') fecharModal();
+        else if (modal.id === 'taskStageModal') fecharModalEtapaTarefa(true);
+        else fecharDetalhesOnboarding();
+        return;
+      }
+
+      if (event.key !== 'Tab') return;
+      prenderFocoNoModal(event, modal);
+    }
+
+    function prenderFocoNoModal(event, modal) {
+      const seletor = [
+        'a[href]',
+        'button:not([disabled])',
+        'input:not([disabled])',
+        'select:not([disabled])',
+        'textarea:not([disabled])',
+        '[tabindex]:not([tabindex="-1"])'
+      ].join(',');
+
+      const focaveis = Array.from(modal.querySelectorAll(seletor)).filter(function (elemento) {
+        return elemento.offsetParent !== null && elemento.getAttribute('aria-hidden') !== 'true';
+      });
+
+      if (!focaveis.length) {
+        event.preventDefault();
+        return;
+      }
+
+      const primeiro = focaveis[0];
+      const ultimo = focaveis[focaveis.length - 1];
+
+      if (event.shiftKey && document.activeElement === primeiro) {
+        event.preventDefault();
+        ultimo.focus();
+      } else if (!event.shiftKey && document.activeElement === ultimo) {
+        event.preventDefault();
+        primeiro.focus();
+      }
+    }
+
+    function restaurarFocoSeguro(elemento) {
+      if (elemento && typeof elemento.focus === 'function' && document.contains(elemento)) {
+        window.requestAnimationFrame(function () {
+          elemento.focus({ preventScroll: true });
+        });
+      }
+    }
+
+    function formularioOnboardingPossuiDados() {
+      const form = document.getElementById('onboardingForm');
+      if (!form) return false;
+
+      return Array.from(new FormData(form).values()).some(function (valor) {
+        return String(valor == null ? '' : valor).trim() !== '';
+      });
+    }
+
+    function descartarFormularioOnboarding() {
+      const form = document.getElementById('onboardingForm');
+      if (form) form.reset();
+      trocarVisualizacao('dashboard');
+      mostrarToast('Cadastro descartado.', 'success');
+    }
+
+    function solicitarCancelamentoCadastro() {
+      if (!formularioOnboardingPossuiDados()) {
+        trocarVisualizacao('dashboard');
+        return;
+      }
+
+      abrirConfirmacao({
+        titulo: 'Descartar cadastro?',
+        mensagem: 'Os dados preenchidos ainda não foram enviados e serão perdidos.',
+        cancelar: 'Continuar preenchendo',
+        confirmar: 'Descartar cadastro',
+        perigosa: true,
+        acao: descartarFormularioOnboarding
+      });
+    }
+
+    function enviarFormulario(event) {
+      event.preventDefault();
+      const form = event.currentTarget;
+
+      if (!form.checkValidity()) {
+        form.reportValidity();
+        mostrarToast('Preencha todos os campos obrigatórios.', 'error');
+        return;
+      }
+
+      const dados = Object.fromEntries(new FormData(form).entries());
+      const submitButton = document.getElementById('submitOnboardingButton');
+      submitButton.disabled = true;
+
+      definirCarregamento(
+        true,
+        'Criando onboarding',
+        'Estamos cadastrando o colaborador, gerando tarefas, criando o evento e enviando o e-mail.'
+      );
+
+      google.script.run
+        .withSuccessHandler(function (resultado) {
+          submitButton.disabled = false;
+          definirCarregamento(false);
+
+          if (!resultado || !resultado.sucesso) {
+            tratarErro(
+              resultado && resultado.mensagem
+                ? resultado.mensagem
+                : 'Não foi possível concluir o onboarding.'
+            );
+            return;
+          }
+
+          form.reset();
+          state.centralTarefasCarregada = false;
+          exibirModalResultado(resultado);
+          mostrarToast('Onboarding criado com sucesso.', 'success');
+          carregarDadosIniciais(false);
+        })
+        .withFailureHandler(function (error) {
+          submitButton.disabled = false;
+          definirCarregamento(false);
+          tratarErro(extrairMensagemErro(error));
+        })
+        .criarOnboardingCompleto(dados);
+    }
+
+    function obterPerfisDemonstracaoCliente() {
+      return [
+        { nome: 'Mariana Alves Rocha', email: 'mariana.rocha.demo@example.com', cargo: 'Analista de Recursos Humanos', departamento: 'Recursos Humanos', dataAdmissao: '2026-08-03', modalidade: 'Presencial', tipoVinculo: 'CLT', liderResponsavel: 'Simone Castro Almeida', emailLider: 'simone.almeida.demo@example.com' },
+        { nome: 'Ricardo Mendes Costa', email: 'ricardo.costa.demo@example.com', cargo: 'Assistente de Departamento Pessoal', departamento: 'Recursos Humanos', dataAdmissao: '2026-08-10', modalidade: 'Presencial', tipoVinculo: 'CLT', liderResponsavel: 'Simone Castro Almeida', emailLider: 'simone.almeida.demo@example.com' },
+        { nome: 'Rafael Nogueira Martins', email: 'rafael.martins.demo@example.com', cargo: 'Analista de Suporte', departamento: 'Tecnologia da Informação', dataAdmissao: '2026-08-17', modalidade: 'Presencial', tipoVinculo: 'CLT', liderResponsavel: 'Marcelo Guimarães Lima', emailLider: 'marcelo.lima.demo@example.com' },
+        { nome: 'Camila Azevedo Santos', email: 'camila.santos.demo@example.com', cargo: 'Analista de Sistemas', departamento: 'Tecnologia da Informação', dataAdmissao: '2026-07-06', modalidade: 'Híbrido', tipoVinculo: 'CLT', liderResponsavel: 'Marcelo Guimarães Lima', emailLider: 'marcelo.lima.demo@example.com' },
+        { nome: 'Bruno Ferreira Duarte', email: 'bruno.duarte.demo@example.com', cargo: 'Assistente Financeiro', departamento: 'Financeiro', dataAdmissao: '2026-08-24', modalidade: 'Presencial', tipoVinculo: 'CLT', liderResponsavel: 'Eduardo Martins Ribeiro', emailLider: 'eduardo.ribeiro.demo@example.com' },
+        { nome: 'Juliana Monteiro Freitas', email: 'juliana.freitas.demo@example.com', cargo: 'Analista Financeira', departamento: 'Financeiro', dataAdmissao: '2026-08-31', modalidade: 'Híbrido', tipoVinculo: 'CLT', liderResponsavel: 'Eduardo Martins Ribeiro', emailLider: 'eduardo.ribeiro.demo@example.com' },
+        { nome: 'Larissa Gomes Vieira', email: 'larissa.vieira.demo@example.com', cargo: 'Analista de Marketing', departamento: 'Marketing', dataAdmissao: '2026-08-12', modalidade: 'Híbrido', tipoVinculo: 'CLT', liderResponsavel: 'Bianca Nascimento Prado', emailLider: 'bianca.prado.demo@example.com' },
+        { nome: 'Thiago Barros Teixeira', email: 'thiago.teixeira.demo@example.com', cargo: 'Designer Gráfico', departamento: 'Marketing', dataAdmissao: '2026-07-13', modalidade: 'Remoto', tipoVinculo: 'PJ', liderResponsavel: 'Bianca Nascimento Prado', emailLider: 'bianca.prado.demo@example.com' },
+        { nome: 'Renata Cardoso Melo', email: 'renata.melo.demo@example.com', cargo: 'Assistente de Secretaria', departamento: 'Secretaria', dataAdmissao: '2026-09-08', modalidade: 'Presencial', tipoVinculo: 'CLT', liderResponsavel: 'Sônia Ribeiro Matos', emailLider: 'sonia.matos.demo@example.com' },
+        { nome: 'Isabela Moraes Castro', email: 'isabela.castro.demo@example.com', cargo: 'Secretária Escolar', departamento: 'Secretaria', dataAdmissao: '2026-08-05', modalidade: 'Presencial', tipoVinculo: 'CLT', liderResponsavel: 'Sônia Ribeiro Matos', emailLider: 'sonia.matos.demo@example.com' },
+        { nome: 'André Luiz Prado', email: 'andre.prado.demo@example.com', cargo: 'Professor de Matemática', departamento: 'Pedagógico', dataAdmissao: '2026-08-18', modalidade: 'Presencial', tipoVinculo: 'CLT', liderResponsavel: 'Helena Duarte Campos', emailLider: 'helena.campos.demo@example.com' },
+        { nome: 'Beatriz Campos Tavares', email: 'beatriz.tavares.demo@example.com', cargo: 'Professora Polivalente', departamento: 'Pedagógico', dataAdmissao: '2026-07-08', modalidade: 'Presencial', tipoVinculo: 'CLT', liderResponsavel: 'Helena Duarte Campos', emailLider: 'helena.campos.demo@example.com' },
+        { nome: 'Patrícia Peixoto Ramos', email: 'patricia.ramos.demo@example.com', cargo: 'Coordenadora Pedagógica', departamento: 'Pedagógico', dataAdmissao: '2026-07-01', modalidade: 'Presencial', tipoVinculo: 'CLT', liderResponsavel: 'Débora Almeida Nunes', emailLider: 'debora.nunes.demo@example.com' },
+        { nome: 'Diego Amaral Batista', email: 'diego.batista.demo@example.com', cargo: 'Assistente Administrativo', departamento: 'Administrativo', dataAdmissao: '2026-08-07', modalidade: 'Presencial', tipoVinculo: 'CLT', liderResponsavel: 'Débora Almeida Nunes', emailLider: 'debora.nunes.demo@example.com' },
+        { nome: 'Helena Duarte Moreira', email: 'helena.moreira.demo@example.com', cargo: 'Analista Administrativa', departamento: 'Administrativo', dataAdmissao: '2026-08-14', modalidade: 'Híbrido', tipoVinculo: 'Temporário', liderResponsavel: 'Débora Almeida Nunes', emailLider: 'debora.nunes.demo@example.com' },
+        { nome: 'Marcos Vinícius Lacerda', email: 'marcos.lacerda.demo@example.com', cargo: 'Auxiliar de Manutenção', departamento: 'Manutenção', dataAdmissao: '2026-09-14', modalidade: 'Presencial', tipoVinculo: 'Terceirizado', liderResponsavel: 'Roberto Freitas Moura', emailLider: 'roberto.moura.demo@example.com' },
+        { nome: 'Paulo Henrique Nunes', email: 'paulo.nunes.demo@example.com', cargo: 'Técnico de Manutenção', departamento: 'Manutenção', dataAdmissao: '2026-08-21', modalidade: 'Presencial', tipoVinculo: 'CLT', liderResponsavel: 'Roberto Freitas Moura', emailLider: 'roberto.moura.demo@example.com' },
+        { nome: 'Eduardo Souza Pires', email: 'eduardo.pires.demo@example.com', cargo: 'Agente de Portaria', departamento: 'Portaria', dataAdmissao: '2026-08-11', modalidade: 'Presencial', tipoVinculo: 'Terceirizado', liderResponsavel: 'Carlos Henrique Paiva', emailLider: 'carlos.paiva.demo@example.com' },
+        { nome: 'Aline Barbosa Farias', email: 'aline.farias.demo@example.com', cargo: 'Recepcionista', departamento: 'Portaria', dataAdmissao: '2026-08-28', modalidade: 'Presencial', tipoVinculo: 'CLT', liderResponsavel: 'Carlos Henrique Paiva', emailLider: 'carlos.paiva.demo@example.com' },
+        { nome: 'Carolina Fonseca Reis', email: 'carolina.reis.demo@example.com', cargo: 'Orientadora Educacional', departamento: 'Pedagógico', dataAdmissao: '2026-07-15', modalidade: 'Presencial', tipoVinculo: 'CLT', liderResponsavel: 'Helena Duarte Campos', emailLider: 'helena.campos.demo@example.com' }
+      ];
+    }
+
+    function preencherDemonstracao() {
+      const perfis = obterPerfisDemonstracaoCliente();
+      const indice = state.demoAutofillIndex % perfis.length;
+      const perfil = perfis[indice];
+
+      state.demoAutofillIndex = (indice + 1) % perfis.length;
+
+      document.getElementById('name').value = perfil.nome;
+      document.getElementById('email').value = perfil.email;
+      document.getElementById('position').value = perfil.cargo;
+      document.getElementById('department').value = perfil.departamento;
+      document.getElementById('admissionDate').value = perfil.dataAdmissao;
+      document.getElementById('workMode').value = perfil.modalidade;
+      document.getElementById('contractType').value = perfil.tipoVinculo;
+      document.getElementById('leaderName').value = perfil.liderResponsavel;
+      document.getElementById('leaderEmail').value = perfil.emailLider;
+      document.getElementById('notes').value =
+        'Perfil fictício ' + String(indice + 1).padStart(2, '0') +
+        ' de 20, preparado para demonstrar o fluxo acadêmico do OnboardFlow.';
+
+      mostrarToast(
+        perfil.nome + ' preenchido para demonstração (' + (indice + 1) + ' de ' + perfis.length + ').',
+        'success'
+      );
+    }
+
+    function exibirModalResultado(resultado) {
+      definirTexto(
+        'resultModalMessage',
+        resultado.mensagem || 'Todas as etapas foram executadas.'
+      );
+
+      document.getElementById('resultModalDetails').innerHTML = [
+        criarDetalheResultado('Colaborador', resultado.colaborador || '-'),
+        criarDetalheResultado('Tarefas criadas', resultado.tarefasCriadas || 0),
+        criarDetalheResultado('Evento no Agenda', resultado.eventoCriado ? 'Criado' : 'Não criado'),
+        criarDetalheResultado('E-mail de boas-vindas', resultado.emailEnviado ? 'Enviado' : 'Não enviado'),
+        criarDetalheResultado(
+          'Destinatário do teste',
+          resultado.destinatarioTeste || 'Configurado no servidor'
+        )
+      ].join('');
+
+      const modal = document.getElementById('resultModal');
+      state.focoAnteriorResultado = document.activeElement;
+      modal.hidden = false;
+      modal.setAttribute('aria-hidden', 'false');
+      window.requestAnimationFrame(function () {
+        const card = modal.querySelector('.modal-card');
+        if (card) card.focus({ preventScroll: true });
+      });
+    }
+
+    function criarDetalheResultado(rotulo, valor) {
+      return (
+        '<div class="result-detail">' +
+        '<span>' + escaparHtml(rotulo) + '</span>' +
+        '<strong>' + escaparHtml(String(valor)) + '</strong>' +
+        '</div>'
+      );
+    }
+
+    function fecharModal() {
+      const modal = document.getElementById('resultModal');
+      modal.hidden = true;
+      modal.setAttribute('aria-hidden', 'true');
+      restaurarFocoSeguro(state.focoAnteriorResultado);
+      state.focoAnteriorResultado = null;
+    }
+
+    function definirCarregamento(ativo, titulo, mensagem) {
+      const overlay = document.getElementById('loadingOverlay');
+      overlay.hidden = !ativo;
+      overlay.setAttribute('aria-hidden', String(!ativo));
+
+      if (titulo) {
+        definirTexto('loadingTitle', titulo);
+      }
+
+      if (mensagem) {
+        definirTexto('loadingMessage', mensagem);
+      }
+    }
+
+    function definirConexao(tipo, texto) {
+      const elemento = document.getElementById('connectionStatus');
+      elemento.className = 'connection-status is-' + tipo;
+      elemento.innerHTML = '<span class="status-dot"></span>' + escaparHtml(texto);
+    }
+
+    function tratarErro(mensagem) {
+      definirConexao('error', 'Erro');
+      mostrarToast(mensagem || 'Ocorreu um erro inesperado.', 'error');
+    }
+
+    function mostrarToast(mensagem, tipo) {
+      const toast = document.getElementById('toast');
+
+      if (state.toastTimer) {
+        window.clearTimeout(state.toastTimer);
+      }
+
+      toast.textContent = mensagem;
+      toast.className = 'toast ' + (tipo === 'error' ? 'is-error' : 'is-success');
+      toast.hidden = false;
+
+      state.toastTimer = window.setTimeout(function () {
+        toast.hidden = true;
+      }, 5000);
+    }
+
+    function definirTexto(id, valor) {
+      const elemento = document.getElementById(id);
+      if (elemento) {
+        elemento.textContent = String(valor);
+      }
+    }
+
+    function formatarData(valor) {
+      if (!valor) {
+        return '-';
+      }
+
+      const partes = String(valor).substring(0, 10).split('-');
+      if (partes.length !== 3) {
+        return escaparHtml(valor);
+      }
+
+      return partes[2] + '/' + partes[1] + '/' + partes[0];
+    }
+
+    function formatarDataInput(data) {
+      return [
+        data.getFullYear(),
+        String(data.getMonth() + 1).padStart(2, '0'),
+        String(data.getDate()).padStart(2, '0')
+      ].join('-');
+    }
+
+    function limitarNumero(valor, minimo, maximo) {
+      const numero = Number(valor);
+      if (!Number.isFinite(numero)) {
+        return minimo;
+      }
+
+      return Math.max(minimo, Math.min(maximo, Math.round(numero)));
+    }
+
+    function normalizarClasse(valor) {
+      return String(valor || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '');
+    }
+
+    function escaparHtml(valor) {
+      return String(valor || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function escaparAtributo(valor) {
+      return escaparHtml(valor);
+    }
+
+    function extrairMensagemErro(error) {
+      if (!error) {
+        return 'Ocorreu um erro inesperado.';
+      }
+
+      if (error.message) {
+        return error.message;
+      }
+
+      return String(error);
+    }
+  })();
+</script>
