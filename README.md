@@ -59,15 +59,25 @@ O OnboardFlow transforma esse processo em um fluxo centralizado, rastreável e o
 ## Fluxo de integração
 
 ```mermaid
-flowchart LR
-    A[Cadastro do colaborador] --> B[Google Apps Script]
-    B --> C[Validação e normalização]
-    C --> D[Airtable: colaborador]
-    D --> E[Airtable: checklist]
-    E --> F[Google Calendar: evento]
-    F --> G[Gmail: boas-vindas]
-    G --> H[Airtable: histórico]
-    H --> I[Dashboard e Central de Tarefas]
+flowchart TD
+    A[Cadastro do colaborador]
+    B[Google Apps Script]
+    C[Validação e normalização]
+    D[Airtable: cadastro do colaborador]
+    E[Airtable: criação do checklist]
+    F[Google Calendar: evento de integração]
+    G[Gmail: envio de boas-vindas]
+    H[Airtable: registro do histórico]
+    I[Dashboard e Central de Tarefas]
+
+    A --> B
+    B --> C
+    C --> D
+    D --> E
+    E --> F
+    F --> G
+    G --> H
+    H --> I
 ```
 
 ## Arquitetura
